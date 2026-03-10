@@ -448,6 +448,7 @@ body { font-family:var(--sans); background:var(--bg-0); color:var(--t1); min-hei
 
 /* D-Pad */
 .dpad-wrap { display:none; justify-content:center; padding:4px 0 8px }
+@media (hover: none) and (pointer: coarse) { .dpad-wrap { display:flex } }
 .dpad {
   display:grid;
   grid-template-areas:"_ up _" "left center right" "_ down _";
@@ -667,4 +668,4 @@ body { font-family:var(--sans); background:var(--bg-0); color:var(--t1); min-hei
   .dpad { grid-template-columns:44px 44px 44px; grid-template-rows:44px 44px 44px }
   .compare-grids-wrap { grid-template-columns:1fr }
 }
-@media(min-width:481px) { .dpad-wrap { display:none } }
+@media(min-width:481px) and (hover:hover) { .dpad-wrap { display:none } }

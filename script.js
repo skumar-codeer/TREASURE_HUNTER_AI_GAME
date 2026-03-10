@@ -164,6 +164,8 @@ function launchGame(m){
   algoBadge.textContent=aInfo.label;
   btnAISolve.style.display=m==='ai'?'none':'';
   compassWrap.style.display=m==='player'?'':'none';
+  const dpadWrap=$('dpad-container');
+  if(dpadWrap) dpadWrap.style.display=m==='player'?'':'none';
   $('h-lives-wrap').style.display=maxLives>1?'':'none';
   splashScreen.classList.add('hide-out');
   setTimeout(()=>{splashScreen.classList.add('hidden');gameScreen.classList.remove('hidden');startRound()},350);
@@ -599,6 +601,7 @@ btnAISolve.addEventListener('click',()=>{
   if(aiRunning||!gameActive)return;
   mode='ai';modeBadge.textContent='AI';modeBadge.classList.add('ai');
   btnAISolve.disabled=true;compassWrap.style.display='none';
+  const dpadWrap=$('dpad-container');if(dpadWrap)dpadWrap.style.display='none';
   clearVis();setMsg(`AI (${ALGORITHMS[selectedAlgo].label}) computing… 🤖`);
   if(!timerInterval)startTimer();
   runAlgorithm(selectedAlgo);
