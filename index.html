@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Intelligent Treasure Hunter – Multi-Algorithm AI Pathfinding" />
+  <title>Treasure Hunter AI — Ultimate Edition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <canvas id="particles-canvas"></canvas>
+  <div class="bg-grid-overlay"></div>
+  <div class="bg-scanlines"></div>
+  <div class="bg-vignette"></div>
+
+  <!-- ═══════ SPLASH ═══════ -->
+  <div id="splash-screen" class="splash">
+    <div class="splash-inner">
+
+      <div class="splash-brand">
+        <div class="brand-chip"><span class="chip-dot"></span>AI PATHFINDING ENGINE v5.0<span class="chip-dot"></span></div>
+        <div class="brand-logo-wrap">
+          <div class="hex-ring hex-ring-1"></div>
+          <div class="hex-ring hex-ring-2"></div>
+          <div class="hex-ring hex-ring-3"></div>
+          <span class="brand-emoji">🧭</span>
+        </div>
+        <h1 class="brand-title">
+          <span>TREASURE</span>
+          <span>HUNTER</span>
+          <span class="brand-ai">— AI ULTIMATE —</span>
+        </h1>
+        <p class="brand-sub">Multi-Algorithm · Terrain Engine · Compare Mode</p>
+        <div class="brand-pills">
+          <span class="pill pill-cyan">A* Search</span>
+          <span class="pill pill-blue">BFS</span>
+          <span class="pill pill-purple">Dijkstra</span>
+          <span class="pill pill-gold">Greedy</span>
+          <span class="pill pill-orange">Terrain</span>
+          <span class="pill pill-green">Power-Ups</span>
+        </div>
+        <div class="race-teaser">⚔️ NEW: Race all 4 algorithms head-to-head!</div>
+      </div>
+
+      <div class="splash-config">
+        <section class="cfg-section">
+          <h3 class="cfg-head"><span class="cfg-dot"></span>Select Difficulty</h3>
+          <div class="diff-grid">
+            <button class="diff-card selected" data-diff="easy"><span class="df-icon">🌿</span><div class="df-info"><strong>Easy</strong><span>8×8 · 4 traps</span></div></button>
+            <button class="diff-card" data-diff="medium"><span class="df-icon">⚡</span><div class="df-info"><strong>Medium</strong><span>10×10 · Terrain</span></div></button>
+            <button class="diff-card" data-diff="hard"><span class="df-icon">🔥</span><div class="df-info"><strong>Hard</strong><span>12×12 · 2 lives</span></div></button>
+            <button class="diff-card" data-diff="extreme"><span class="df-icon">💀</span><div class="df-info"><strong>Extreme</strong><span>15×15 · Fog+Power</span></div></button>
+          </div>
+        </section>
+
+        <section class="cfg-section">
+          <h3 class="cfg-head"><span class="cfg-dot"></span>Choose AI Algorithm</h3>
+          <div class="algo-grid">
+            <button class="algo-card selected" data-algo="astar"><div class="ac-top"><span class="ac-badge badge-astar">A*</span><span class="ac-name">A* Search</span></div><span class="ac-desc">Optimal + fast via heuristic</span></button>
+            <button class="algo-card" data-algo="bfs"><div class="ac-top"><span class="ac-badge badge-bfs">BFS</span><span class="ac-name">Breadth-First</span></div><span class="ac-desc">Explores all nodes equally</span></button>
+            <button class="algo-card" data-algo="dijkstra"><div class="ac-top"><span class="ac-badge badge-dijkstra">DIJ</span><span class="ac-name">Dijkstra</span></div><span class="ac-desc">Optimal with weighted terrain</span></button>
+            <button class="algo-card" data-algo="greedy"><div class="ac-top"><span class="ac-badge badge-greedy">GRD</span><span class="ac-name">Greedy Best-First</span></div><span class="ac-desc">Fastest but not optimal</span></button>
+          </div>
+        </section>
+
+        <section class="cfg-section">
+          <h3 class="cfg-head"><span class="cfg-dot"></span>Launch Mode</h3>
+          <div class="mode-btns">
+            <button id="splash-player" class="mode-btn mode-player">
+              <div class="mb-icon">🎮</div>
+              <div class="mb-body"><span class="mb-name">Play as Explorer</span><span class="mb-sub">Arrow · WASD · Touch D-pad</span></div>
+              <span class="mb-arrow">→</span>
+            </button>
+            <button id="splash-ai" class="mode-btn mode-ai">
+              <div class="mb-icon">🤖</div>
+              <div class="mb-body"><span class="mb-name">Watch AI Solve</span><span class="mb-sub">Visualize selected algorithm</span></div>
+              <span class="mb-arrow">→</span>
+            </button>
+            <button id="splash-compare" class="mode-btn mode-compare">
+              <div class="mb-icon">⚔️</div>
+              <div class="mb-body"><span class="mb-name">Algorithm Race ★ NEW</span><span class="mb-sub">All 4 algorithms compete live</span></div>
+              <span class="mb-arrow">→</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="leaderboard-peek">
+          <div class="lb-head"><span class="cfg-dot"></span>TOP SCORES</div>
+          <div id="lb-entries" class="lb-entries">No scores yet. Be the first!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ GAME SCREEN ═══════ -->
+  <div id="game-screen" class="game-screen hidden">
+    <header class="topbar">
+      <div class="topbar-l">
+        <button id="btn-back" class="chip-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <span class="topbar-name">🧭 TREASURE HUNTER AI</span>
+      </div>
+      <div class="topbar-r">
+        <span class="badge b-mode" id="mode-badge">PLAYER</span>
+        <span class="badge b-diff" id="diff-badge">EASY</span>
+        <span class="badge b-algo" id="algo-badge">A*</span>
+      </div>
+    </header>
+
+    <div class="hud">
+      <div class="hud-strip">
+        <div class="h-item h-lives" id="h-lives-wrap">
+          <div class="health-ring">
+            <svg viewBox="0 0 36 36"><circle class="hr-bg" cx="18" cy="18" r="15.9"/><circle class="hr-fg" id="hr-fg" cx="18" cy="18" r="15.9"/></svg>
+            <span class="hr-icon" id="lives-value">❤️</span>
+          </div>
+          <span class="h-label">Lives</span>
+        </div>
+        <div class="h-item"><div class="h-val" id="moves-value">0</div><span class="h-label">Moves</span></div>
+        <div class="h-item"><div class="h-val" id="timer-value">0:00</div><span class="h-label">Time</span></div>
+        <div class="h-item"><div class="h-val" id="score-value">1000</div><span class="h-label">Score</span></div>
+        <div class="h-item"><div class="h-val" id="nodes-value">—</div><span class="h-label">Nodes</span></div>
+        <div class="h-item" id="powerup-hud" style="display:none"><div class="h-val powerup-val" id="powerup-value">—</div><span class="h-label">Power</span></div>
+        <div class="h-item h-compass" id="compass-wrap">
+          <div class="compass">
+            <div class="compass-needle" id="compass-needle"></div>
+            <span class="compass-n">N</span>
+          </div>
+          <span class="h-label" id="compass-dist">? steps</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="game-message" class="gmsg"></div>
+
+    <div class="grid-area">
+      <div id="grid" class="grid"></div>
+    </div>
+
+    <div class="actions">
+      <button id="btn-ai-solve" class="abtn abtn-ai">🤖 AI Solve</button>
+      <button id="btn-speed" class="abtn abtn-speed">⏩ Speed</button>
+      <button id="btn-restart" class="abtn abtn-new">🔄 New Grid</button>
+      <button id="btn-menu" class="abtn abtn-menu">☰ Menu</button>
+    </div>
+
+    <div class="dpad-wrap" id="dpad-container">
+      <div class="dpad">
+        <button id="dpad-up" class="dp up">▲</button>
+        <button id="dpad-left" class="dp left">◄</button>
+        <div class="dp-center"></div>
+        <button id="dpad-right" class="dp right">►</button>
+        <button id="dpad-down" class="dp down">▼</button>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="lg"><i class="ls ls-agent"></i>Agent</span>
+      <span class="lg"><i class="ls ls-treasure"></i>Treasure</span>
+      <span class="lg"><i class="ls ls-trap"></i>Trap</span>
+      <span class="lg"><i class="ls ls-wall"></i>Wall</span>
+      <span class="lg"><i class="ls ls-mud"></i>Mud×3</span>
+      <span class="lg"><i class="ls ls-visited"></i>Explored</span>
+      <span class="lg"><i class="ls ls-path"></i>Path</span>
+    </div>
+  </div>
+
+  <!-- ═══════ COMPARE SCREEN ═══════ -->
+  <div id="compare-screen" class="compare-screen hidden">
+    <header class="topbar">
+      <div class="topbar-l">
+        <button id="btn-compare-back" class="chip-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <span class="topbar-name">⚔️ ALGORITHM RACE</span>
+      </div>
+      <div class="topbar-r"><span class="badge b-diff" id="compare-diff-badge">EASY</span></div>
+    </header>
+
+    <div class="compare-grids-wrap" id="compare-grids-wrap"></div>
+
+    <div class="compare-winner hidden" id="compare-winner"></div>
+
+    <div class="compare-actions">
+      <button id="btn-compare-restart" class="abtn abtn-ai">🔄 New Race</button>
+      <button id="btn-compare-menu" class="abtn abtn-menu">☰ Menu</button>
+    </div>
+  </div>
+
+  <!-- ═══════ END SCREEN ═══════ -->
+  <div id="end-screen" class="end-screen hidden">
+    <div class="end-card" id="end-card">
+      <div class="end-phase" id="end-phase-title">
+        <div class="end-emoji" id="end-emoji">🏆</div>
+        <h2 class="end-title" id="end-title">Treasure Found!</h2>
+        <p class="end-sub" id="end-sub"></p>
+      </div>
+      <div class="end-phase hidden" id="end-phase-stats">
+        <div class="end-stats" id="end-stats-grid">
+          <div class="es" id="es-moves"><div class="es-l">Moves</div><div class="es-v">0</div></div>
+          <div class="es" id="es-time"><div class="es-l">Time</div><div class="es-v">0:00</div></div>
+          <div class="es" id="es-score"><div class="es-l">Score</div><div class="es-v">1000</div></div>
+          <div class="es" id="es-nodes"><div class="es-l">Nodes</div><div class="es-v">—</div></div>
+        </div>
+        <div id="new-highscore-banner" class="hs-banner hidden">🏆 NEW HIGH SCORE!</div>
+      </div>
+      <div class="end-phase hidden" id="end-phase-explain">
+        <div class="explain-box" id="explain-box"></div>
+      </div>
+      <div class="end-phase hidden" id="end-phase-actions">
+        <button id="end-retry" class="mode-btn mode-player mb-compact">🔄 Play Again</button>
+        <button id="end-menu" class="mode-btn mode-ai mb-compact">🏠 Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fx-container" class="fx-container"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
