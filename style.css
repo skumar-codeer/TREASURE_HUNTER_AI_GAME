@@ -448,10 +448,10 @@ body { font-family:var(--sans); background:var(--bg-0); color:var(--t1); min-hei
 
 /* D-Pad */
 .dpad-wrap { display:none; justify-content:center; padding:4px 0 8px }
-@media (hover: none) and (pointer: coarse) { .dpad-wrap { display:flex } }
+@media (hover: none) and (pointer: coarse) { .dpad-wrap { display:flex !important; } }
 .dpad {
   display:grid;
-  grid-template-areas:"_ up _" "left center right" "_ down _";
+  grid-template-areas:". up ." "left center right" ". down .";
   grid-template-columns:56px 56px 56px; grid-template-rows:56px 56px 56px;
   gap:4px;
 }
