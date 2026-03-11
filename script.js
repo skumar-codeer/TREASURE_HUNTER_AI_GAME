@@ -481,72 +481,75 @@ class MinHeap{
   _d(i){const n=this.d.length;while(true){let s=i;const l=2*i+1,r=2*i+2;if(l<n&&this.d[l].f<this.d[s].f)s=l;if(r<n&&this.d[r].f<this.d[s].f)s=r;if(s!==i){[this.d[i],this.d[s]]=[this.d[s],this.d[i]];i=s;}else break;}}
 }
 
+function isBlocked(cellType){ return cellType===CELL_OBSTACLE||cellType===CELL_TRAP; }
+
 function runAlgorithm(algo, startP, goalP, gridSnapshot, onDone){
-  // Use global state if not provided (single game mode)
-  const useGlobal = !startP;
-  const s = startP||agentPos, g = goalP||goalPos;
-  const G = gridSnapshot||grid;
+  const s = startP || {r:agentPos.r, c:agentPos.c};
+  const goal = goalP || {r:goalPos.r, c:goalPos.c};
+  const G = gridSnapshot || grid;
   const R = G.length, C = G[0].length;
 
-  aiRunning=true;
-  const gS=Array.from({length:R},()=>Array(C).fill(Infinity));gS[s.r][s.c]=0;
-  const par=Array.from({length:R},()=>Array(C).fill(null));
-  const closed=Array.from({length:R},()=>Array(C).fill(false));
-  const expl=[];let fp=null;
+  aiRunning = true;
+  const dist = Array.from({length:R},()=>Array(C).fill(Infinity));
+  dist[s.r][s.c] = 0;
+  const par  = Array.from({length:R},()=>Array(C).fill(null));
+  const seen = Array.from({length:R},()=>Array(C).fill(false));
+  const expl = [];
+  let fp = null;
+
+  const DIRS = [[0,1],[0,-1],[1,0],[-1,0]];
 
   if(algo==='bfs'){
-    // BFS — simple queue
-    const q=[{r:s.r,c:s.c}];gS[s.r][s.c]=0;const v=Array.from({length:R},()=>Array(C).fill(false));v[s.r][s.c]=true;
+    const q=[{r:s.r,c:s.c}];
+    seen[s.r][s.c]=true;
     while(q.length){
-      const{r,c}=q.shift();expl.push({r,c});
-      if(r===g.r&&c===g.c){fp=recon(par,s,g);break;}
-      for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){
+      const{r,c}=q.shift();
+      expl.push({r,c});
+      if(r===goal.r&&c===goal.c){fp=buildPath(par,s,goal);break;}
+      for(const[dr,dc]of DIRS){
         const nr=r+dr,nc=c+dc;
-        if(!inBound(nr,nc,R,C)||v[nr][nc])continue;
-        if(G[nr][nc]===CELL_OBSTACLE||G[nr][nc]===CELL_TRAP)continue;
-        v[nr][nc]=true;par[nr][nc]={r,c};q.push({r:nr,c:nc});
+        if(!inBound(nr,nc,R,C)||seen[nr][nc]||isBlocked(G[nr][nc]))continue;
+        seen[nr][nc]=true;par[nr][nc]={r,c};q.push({r:nr,c:nc});
       }
     }
   } else if(algo==='dijkstra'){
-    const open=new MinHeap();open.push({r:s.r,c:s.c,g:0,f:0});
-    while(open.size){
-      const{r,c,g:cost}=open.pop();
-      if(closed[r][c])continue;closed[r][c]=true;expl.push({r,c});
-      if(r===g.r&&c===g.c){fp=recon(par,s,g);break;}
-      for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){
+    const pq=new MinHeap();pq.push({r:s.r,c:s.c,f:0,cost:0});
+    while(pq.size){
+      const{r,c,cost}=pq.pop();
+      if(seen[r][c])continue;seen[r][c]=true;expl.push({r,c});
+      if(r===goal.r&&c===goal.c){fp=buildPath(par,s,goal);break;}
+      for(const[dr,dc]of DIRS){
         const nr=r+dr,nc=c+dc;
-        if(!inBound(nr,nc,R,C)||closed[nr][nc])continue;
-        if(G[nr][nc]===CELL_OBSTACLE||G[nr][nc]===CELL_TRAP)continue;
-        const tc=cost+(TERRAIN_COST[G[nr][nc]]||1);
-        if(tc<gS[nr][nc]){gS[nr][nc]=tc;par[nr][nc]={r,c};open.push({r:nr,c:nc,g:tc,f:tc});}
+        if(!inBound(nr,nc,R,C)||seen[nr][nc]||isBlocked(G[nr][nc]))continue;
+        const nc2=c+dc;
+        const newCost=cost+(TERRAIN_COST[G[nr][nc]]||1);
+        if(newCost<dist[nr][nc]){dist[nr][nc]=newCost;par[nr][nc]={r,c};pq.push({r:nr,c:nc,f:newCost,cost:newCost});}
       }
     }
   } else if(algo==='greedy'){
-    const open=new MinHeap();open.push({r:s.r,c:s.c,g:0,f:heuristic(s.r,s.c,g.r,g.c)});
-    while(open.size){
-      const{r,c,g:cost}=open.pop();
-      if(closed[r][c])continue;closed[r][c]=true;expl.push({r,c});
-      if(r===g.r&&c===g.c){fp=recon(par,s,g);break;}
-      for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){
+    const pq=new MinHeap();pq.push({r:s.r,c:s.c,f:heuristic(s.r,s.c,goal.r,goal.c),cost:0});
+    while(pq.size){
+      const{r,c,cost}=pq.pop();
+      if(seen[r][c])continue;seen[r][c]=true;expl.push({r,c});
+      if(r===goal.r&&c===goal.c){fp=buildPath(par,s,goal);break;}
+      for(const[dr,dc]of DIRS){
         const nr=r+dr,nc=c+dc;
-        if(!inBound(nr,nc,R,C)||closed[nr][nc])continue;
-        if(G[nr][nc]===CELL_OBSTACLE||G[nr][nc]===CELL_TRAP)continue;
-        if(gS[nr][nc]===Infinity){gS[nr][nc]=cost+1;par[nr][nc]={r,c};open.push({r:nr,c:nc,g:cost+1,f:heuristic(nr,nc,g.r,g.c)});}
+        if(!inBound(nr,nc,R,C)||seen[nr][nc]||isBlocked(G[nr][nc]))continue;
+        if(dist[nr][nc]===Infinity){dist[nr][nc]=cost+1;par[nr][nc]={r,c};pq.push({r:nr,c:nc,f:heuristic(nr,nc,goal.r,goal.c),cost:cost+1});}
       }
     }
   } else {
-    // A* default
-    const open=new MinHeap();open.push({r:s.r,c:s.c,g:0,f:heuristic(s.r,s.c,g.r,g.c)});
-    while(open.size){
-      const{r,c,g:cost}=open.pop();
-      if(closed[r][c])continue;closed[r][c]=true;expl.push({r,c});
-      if(r===g.r&&c===g.c){fp=recon(par,s,g);break;}
-      for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){
+    // A* (default)
+    const pq=new MinHeap();pq.push({r:s.r,c:s.c,f:heuristic(s.r,s.c,goal.r,goal.c),cost:0});
+    while(pq.size){
+      const{r,c,cost}=pq.pop();
+      if(seen[r][c])continue;seen[r][c]=true;expl.push({r,c});
+      if(r===goal.r&&c===goal.c){fp=buildPath(par,s,goal);break;}
+      for(const[dr,dc]of DIRS){
         const nr=r+dr,nc=c+dc;
-        if(!inBound(nr,nc,R,C)||closed[nr][nc])continue;
-        if(G[nr][nc]===CELL_OBSTACLE||G[nr][nc]===CELL_TRAP)continue;
-        const tc=cost+(TERRAIN_COST[G[nr][nc]]||1);
-        if(tc<gS[nr][nc]){gS[nr][nc]=tc;par[nr][nc]={r,c};open.push({r:nr,c:nc,g:tc,f:tc+heuristic(nr,nc,g.r,g.c)});}
+        if(!inBound(nr,nc,R,C)||seen[nr][nc]||isBlocked(G[nr][nc]))continue;
+        const newCost=cost+(TERRAIN_COST[G[nr][nc]]||1);
+        if(newCost<dist[nr][nc]){dist[nr][nc]=newCost;par[nr][nc]={r,c};pq.push({r:nr,c:nc,f:newCost+heuristic(nr,nc,goal.r,goal.c),cost:newCost});}
       }
     }
   }
@@ -554,14 +557,27 @@ function runAlgorithm(algo, startP, goalP, gridSnapshot, onDone){
   if(onDone){onDone({expl,fp,nodes:expl.length});return;}
 
   // Single mode: animate on main grid
-  nodesExplored=expl.length;nodesEl.textContent=nodesExplored;bumpEl(nodesEl);
+  nodesExplored=expl.length;
+  if(nodesEl)nodesEl.textContent=nodesExplored;bumpEl(nodesEl);
   if(fogEnabled){for(let r=0;r<R;r++)for(let c=0;c<C;c++)fogRevealed.add(`${r},${c}`);refreshFog();}
   const algoInfo=ALGORITHMS[algo];
+  if(!fp && expl.length===0){
+    setMsg('No reachable nodes — grid may be fully blocked!','lose');
+    aiRunning=false;stopTimer();return;
+  }
   animExpl(expl,fp,s,algoInfo.visitClass,algoInfo.pathClass);
 }
 
+function buildPath(par,s,goal){
+  const p=[];let cur={r:goal.r,c:goal.c};
+  let safety=0;
+  while(cur&&!(cur.r===s.r&&cur.c===s.c)&&safety++<500){p.push({r:cur.r,c:cur.c});cur=par[cur.r][cur.c];}
+  if(!cur)return null;
+  p.push({r:s.r,c:s.c});
+  return p.reverse();
+}
+
 function inBound(r,c,R,C){return r>=0&&r<R&&c>=0&&c<C;}
-function recon(par,s,g){const p=[];let c=g;while(c&&!(c.r===s.r&&c.c===s.c)){p.push(c);c=par[c.r][c.c];}p.push(s);return p.reverse();}
 
 function getAnimSpeed(){return Math.max(5,Math.min(60,400/Math.max(1,nodesExplored))/aiSpeed);}
 
@@ -720,28 +736,65 @@ function renderMiniGrid(gEl,G,R,C,agent,goal,cellSize){
 
 function markMini(gEl,R,C,r,c,cls){const el=gEl.children[r*C+c];if(el)el.classList.add(cls);}
 
-function runAlgorithmCompare(algo,G,R,C,s,g,gEl,cellSize){
-  // Clone grid for search (don't mutate original)
-  const Gc=G.map(row=>[...row]);
-  const gS=Array.from({length:R},()=>Array(C).fill(Infinity));gS[s.r][s.c]=0;
+function runAlgorithmCompare(algo,G,R,C,s,goalNode,gEl,cellSize){
+  const dist=Array.from({length:R},()=>Array(C).fill(Infinity));dist[s.r][s.c]=0;
   const par=Array.from({length:R},()=>Array(C).fill(null));
-  const closed=Array.from({length:R},()=>Array(C).fill(false));
+  const seen=Array.from({length:R},()=>Array(C).fill(false));
   const expl=[];let fp=null;
   const info=ALGORITHMS[algo];
+  const DIRS=[[0,1],[0,-1],[1,0],[-1,0]];
+  const blocked=ct=>ct===CELL_OBSTACLE||ct===CELL_TRAP;
 
   if(algo==='bfs'){
-    const q=[{r:s.r,c:s.c}];const v=Array.from({length:R},()=>Array(C).fill(false));v[s.r][s.c]=true;
-    while(q.length){const{r,c}=q.shift();expl.push({r,c});if(r===g.r&&c===g.c){fp=reconLocal(par,s,g);break;}for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>=R||nc<0||nc>=C||v[nr][nc])continue;if(Gc[nr][nc]===CELL_OBSTACLE||Gc[nr][nc]===CELL_TRAP)continue;v[nr][nc]=true;par[nr][nc]={r,c};q.push({r:nr,c:nc});}}
+    const q=[{r:s.r,c:s.c}];seen[s.r][s.c]=true;
+    while(q.length){
+      const{r,c}=q.shift();expl.push({r,c});
+      if(r===goalNode.r&&c===goalNode.c){fp=buildPath(par,s,goalNode);break;}
+      for(const[dr,dc]of DIRS){
+        const nr=r+dr,nc=c+dc;
+        if(nr<0||nr>=R||nc<0||nc>=C||seen[nr][nc]||blocked(G[nr][nc]))continue;
+        seen[nr][nc]=true;par[nr][nc]={r,c};q.push({r:nr,c:nc});
+      }
+    }
   } else if(algo==='dijkstra'){
-    const open=new MinHeap();open.push({r:s.r,c:s.c,g:0,f:0});
-    while(open.size){const{r,c,g:cost}=open.pop();if(closed[r][c])continue;closed[r][c]=true;expl.push({r,c});if(r===g.r&&c===g.c){fp=reconLocal(par,s,g);break;}for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>=R||nc<0||nc>=C||closed[nr][nc])continue;if(Gc[nr][nc]===CELL_OBSTACLE||Gc[nr][nc]===CELL_TRAP)continue;const tc=cost+(TERRAIN_COST[Gc[nr][nc]]||1);if(tc<gS[nr][nc]){gS[nr][nc]=tc;par[nr][nc]={r,c};open.push({r:nr,c:nc,g:tc,f:tc});}}}
+    const pq=new MinHeap();pq.push({r:s.r,c:s.c,f:0,cost:0});
+    while(pq.size){
+      const{r,c,cost}=pq.pop();
+      if(seen[r][c])continue;seen[r][c]=true;expl.push({r,c});
+      if(r===goalNode.r&&c===goalNode.c){fp=buildPath(par,s,goalNode);break;}
+      for(const[dr,dc]of DIRS){
+        const nr=r+dr,nc=c+dc;
+        if(nr<0||nr>=R||nc<0||nc>=C||seen[nr][nc]||blocked(G[nr][nc]))continue;
+        const nc2=cost+(TERRAIN_COST[G[nr][nc]]||1);
+        if(nc2<dist[nr][nc]){dist[nr][nc]=nc2;par[nr][nc]={r,c};pq.push({r:nr,c:nc,f:nc2,cost:nc2});}
+      }
+    }
   } else if(algo==='greedy'){
-    const open=new MinHeap();open.push({r:s.r,c:s.c,g:0,f:heuristic(s.r,s.c,g.r,g.c)});
-    while(open.size){const{r,c,g:cost}=open.pop();if(closed[r][c])continue;closed[r][c]=true;expl.push({r,c});if(r===g.r&&c===g.c){fp=reconLocal(par,s,g);break;}for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>=R||nc<0||nc>=C||closed[nr][nc])continue;if(Gc[nr][nc]===CELL_OBSTACLE||Gc[nr][nc]===CELL_TRAP)continue;if(gS[nr][nc]===Infinity){gS[nr][nc]=cost+1;par[nr][nc]={r,c};open.push({r:nr,c:nc,g:cost+1,f:heuristic(nr,nc,g.r,g.c)});}}}
+    const pq=new MinHeap();pq.push({r:s.r,c:s.c,f:heuristic(s.r,s.c,goalNode.r,goalNode.c),cost:0});
+    while(pq.size){
+      const{r,c,cost}=pq.pop();
+      if(seen[r][c])continue;seen[r][c]=true;expl.push({r,c});
+      if(r===goalNode.r&&c===goalNode.c){fp=buildPath(par,s,goalNode);break;}
+      for(const[dr,dc]of DIRS){
+        const nr=r+dr,nc=c+dc;
+        if(nr<0||nr>=R||nc<0||nc>=C||seen[nr][nc]||blocked(G[nr][nc]))continue;
+        if(dist[nr][nc]===Infinity){dist[nr][nc]=cost+1;par[nr][nc]={r,c};pq.push({r:nr,c:nc,f:heuristic(nr,nc,goalNode.r,goalNode.c),cost:cost+1});}
+      }
+    }
   } else {
     // A*
-    const open=new MinHeap();open.push({r:s.r,c:s.c,g:0,f:heuristic(s.r,s.c,g.r,g.c)});
-    while(open.size){const{r,c,g:cost}=open.pop();if(closed[r][c])continue;closed[r][c]=true;expl.push({r,c});if(r===g.r&&c===g.c){fp=reconLocal(par,s,g);break;}for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0]]){const nr=r+dr,nc=c+dc;if(nr<0||nr>=R||nc<0||nc>=C||closed[nr][nc])continue;if(Gc[nr][nc]===CELL_OBSTACLE||Gc[nr][nc]===CELL_TRAP)continue;const tc=cost+(TERRAIN_COST[Gc[nr][nc]]||1);if(tc<gS[nr][nc]){gS[nr][nc]=tc;par[nr][nc]={r,c};open.push({r:nr,c:nc,g:tc,f:tc+heuristic(nr,nc,g.r,g.c)});}}}
+    const pq=new MinHeap();pq.push({r:s.r,c:s.c,f:heuristic(s.r,s.c,goalNode.r,goalNode.c),cost:0});
+    while(pq.size){
+      const{r,c,cost}=pq.pop();
+      if(seen[r][c])continue;seen[r][c]=true;expl.push({r,c});
+      if(r===goalNode.r&&c===goalNode.c){fp=buildPath(par,s,goalNode);break;}
+      for(const[dr,dc]of DIRS){
+        const nr=r+dr,nc=c+dc;
+        if(nr<0||nr>=R||nc<0||nc>=C||seen[nr][nc]||blocked(G[nr][nc]))continue;
+        const nc2=cost+(TERRAIN_COST[G[nr][nc]]||1);
+        if(nc2<dist[nr][nc]){dist[nr][nc]=nc2;par[nr][nc]={r,c};pq.push({r:nr,c:nc,f:nc2+heuristic(nr,nc,goalNode.r,goalNode.c),cost:nc2});}
+      }
+    }
   }
 
   // Animate exploration
@@ -751,41 +804,43 @@ function runAlgorithmCompare(algo,G,R,C,s,g,gEl,cellSize){
     if(i>=expl.length){
       clearInterval(tid);
       if(fp){
-        animateMiniPath(gEl,fp,s,g,C,info.pathClass,algo);
-        $(`#cg-stat-${algo}`).textContent=`${expl.length} nodes`;
+        animateMiniPath(gEl,fp,s,goalNode,C,info.pathClass,algo);
+        document.getElementById(`cg-stat-${algo}`).textContent=`${expl.length} nodes`;
       } else {
-        $(`#cg-foot-${algo}`).textContent='❌ No path found';
+        document.getElementById(`cg-foot-${algo}`).textContent='❌ No path found';
         compareResults[algo]={nodes:expl.length,path:null};
         checkCompareComplete();
       }
       return;
     }
     const{r,c}=expl[i];
-    if(!(r===s.r&&c===s.c)&&!(r===g.r&&c===g.c))markMini(gEl,R,C,r,c,info.visitClass);
+    if(!(r===s.r&&c===s.c)&&!(r===goalNode.r&&c===goalNode.c))markMini(gEl,R,C,r,c,info.visitClass);
     i++;
   },baseSpd);
   compareTimers.push(tid);
 }
 
-function animateMiniPath(gEl,path,s,g,C,pathCls,algo){
+function animateMiniPath(gEl,path,s,goalNode,C,pathCls,algo){
   let i=0;
   const tid=setInterval(()=>{
     if(i>=path.length){
       clearInterval(tid);
-      const foot=path.length-1;
-      $(`#cg-foot-${algo}`).textContent=`✓ ${foot} steps`;
-      compareResults[algo]={nodes:parseInt($(`#cg-stat-${algo}`).textContent)||0,path:foot};
+      const steps=path.length-1;
+      document.getElementById(`cg-foot-${algo}`).textContent=`✓ ${steps} steps`;
+      const nodeCount=parseInt(document.getElementById(`cg-stat-${algo}`).textContent)||0;
+      compareResults[algo]={nodes:nodeCount,path:steps};
       gEl.closest('.compare-grid-container').classList.add('done');
       checkCompareComplete();
       return;
     }
-    const{r,c}=path[i];if(!(r===s.r&&c===s.c)&&!(r===g.r&&c===g.c))markMini(gEl,compareRows,C,r,c,pathCls);
+    const{r,c}=path[i];
+    if(!(r===s.r&&c===s.c)&&!(r===goalNode.r&&c===goalNode.c))markMini(gEl,compareRows,C,r,c,pathCls);
     i++;
   },35);
   compareTimers.push(tid);
 }
 
-function reconLocal(par,s,g){const p=[];let c=g;while(c&&!(c.r===s.r&&c.c===s.c)){p.push(c);c=par[c.r][c.c];}p.push(s);return p.reverse();}
+// buildPath defined above near runAlgorithm
 
 function checkCompareComplete(){
   const done=Object.keys(compareResults);
@@ -835,23 +890,42 @@ $('btn-compare-restart')?.addEventListener('click',()=>{startCompareRound();});
 function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
 function inB(r,c){return r>=0&&r<rows&&c>=0&&c<cols;}
 
-// ══════════════════════════════════════════
-// 2-PLAYER MODE
-// ══════════════════════════════════════════
 
-const CELL_P1 = 8, CELL_P2 = 9;
+// ══════════════════════════════════════════════════════════
+// 2-PLAYER RACE MODE — Rebuilt
+// Split-screen · Bombs · Speed boosts · Distance tracker
+// ══════════════════════════════════════════════════════════
+
+const CELL_P1 = 8, CELL_P2 = 9, CELL_SPEED = 10, CELL_BOMB_PICKUP = 11;
 
 const twopState = {
   grid: [], rows: 0, cols: 0,
-  p1: { pos:{r:0,c:0}, moves:0, lives:1, maxLives:1, score:1000, powerup:null, alive:true, trail:[] },
-  p2: { pos:{r:0,c:0}, moves:0, lives:1, maxLives:1, score:1000, powerup:null, alive:true, trail:[] },
+  treasurePos: {r:0,c:0},
+  p1: null, p2: null,
   trapPositions: [],
   active: false,
   timerInterval: null,
   elapsed: 0,
   winner: null,
+  maxDist: 1,  // for progress bar normalisation
 };
 
+function makePState(maxLives) {
+  return {
+    pos: {r:0,c:0},
+    moves: 0,
+    lives: maxLives,
+    maxLives,
+    score: 1000,
+    shield: false,
+    bombs: 1,       // each player starts with 1 bomb
+    speedMoves: 0,  // >0 means speed-boost active (skips animation delay)
+    alive: true,
+    trail: [],
+  };
+}
+
+// ── Launch ──
 function launchTwoPlayer() {
   ensureAudio();
   const cfg = DIFFICULTY[difficulty];
@@ -860,68 +934,33 @@ function launchTwoPlayer() {
   splashScreen.classList.add('hide-out');
   setTimeout(() => {
     splashScreen.classList.add('hidden');
-    const sc = document.getElementById('twop-screen');
-    sc.classList.remove('hidden');
+    document.getElementById('twop-screen').classList.remove('hidden');
     document.getElementById('twop-diff-badge').textContent = cfg.label;
     startTwoPlayerRound();
   }, 350);
 }
 
-function generateTwopGrid() {
-  const cfg = DIFFICULTY[difficulty];
-  const R = twopState.rows, C = twopState.cols;
-  let att = 0, G, p1, p2;
-  do {
-    G = Array.from({length:R}, () => Array(C).fill(CELL_EMPTY));
-    p1 = {r: randInt(1, R-2), c: 0};
-    p2 = {r: randInt(1, R-2), c: C-1};
-    G[p1.r][p1.c] = CELL_P1;
-    G[p2.r][p2.c] = CELL_P2;
-    // Treasure in the middle-ish
-    const tr = {r: randInt(Math.floor(R*.3), Math.floor(R*.7)), c: randInt(Math.floor(C*.3), Math.floor(C*.7))};
-    G[tr.r][tr.c] = CELL_TREASURE;
-    twopState.treasurePos = tr;
-    placeRandomIn(G, R, C, CELL_OBSTACLE, cfg.obstacles);
-    placeRandomIn(G, R, C, CELL_TRAP,     Math.floor(cfg.traps * .6));
-    placeRandomIn(G, R, C, CELL_MUD,      cfg.mud);
-    placeRandomIn(G, R, C, CELL_POWERUP,  cfg.powerups);
-    att++;
-  } while (att < 200 && !(hasPathIn(G,R,C,p1,twopState.treasurePos) && hasPathIn(G,R,C,p2,twopState.treasurePos)));
-
-  twopState.grid = G;
-  twopState.p1.pos = p1;
-  twopState.p2.pos = p2;
-  twopState.trapPositions = [];
-  for (let r=0;r<R;r++) for (let c=0;c<C;c++) if(G[r][c]===CELL_TRAP) twopState.trapPositions.push({r,c});
-}
-
 function startTwoPlayerRound() {
-  // Reset state
   clearInterval(twopState.timerInterval);
   twopState.active = false;
   twopState.winner = null;
   twopState.elapsed = 0;
+  document.getElementById('twop-timer').textContent = '0:00';
 
   const cfg = DIFFICULTY[difficulty];
-  const ml = cfg.lives;
-  twopState.p1 = { pos:{r:0,c:0}, moves:0, lives:ml, maxLives:ml, score:1000, powerup:null, alive:true, trail:[] };
-  twopState.p2 = { pos:{r:0,c:0}, moves:0, lives:ml, maxLives:ml, score:1000, powerup:null, alive:true, trail:[] };
+  twopState.p1 = makePState(cfg.lives);
+  twopState.p2 = makePState(cfg.lives);
 
   generateTwopGrid();
   renderTwopGrid();
   updateTwopHUD();
-
-  document.getElementById('twop-badge-p1').textContent = 'P1 ALIVE';
-  document.getElementById('twop-badge-p1').classList.remove('eliminated');
-  document.getElementById('twop-badge-p2').textContent = 'P2 ALIVE';
-  document.getElementById('twop-badge-p2').classList.remove('eliminated');
-  document.getElementById('p1-lives-wrap').style.display = ml > 1 ? '' : 'none';
-  document.getElementById('p2-lives-wrap').style.display = ml > 1 ? '' : 'none';
-
+  updateProgressBars();
+  resetBombBtns();
   setTwopMsg('Get ready…');
+
   showCountdown(() => {
     twopState.active = true;
-    setTwopMsg('🏃 Race to the treasure! P1=WASD · P2=ARROWS');
+    setTwopMsg('🏃 Race to the 💰 treasure! P1=WASD · P2=Arrow keys');
     twopState.timerInterval = setInterval(() => {
       twopState.elapsed++;
       document.getElementById('twop-timer').textContent = fmtT(twopState.elapsed);
@@ -929,25 +968,45 @@ function startTwoPlayerRound() {
   });
 }
 
-// Countdown overlay 3-2-1-GO!
-function showCountdown(cb) {
-  const overlay = document.createElement('div');
-  overlay.className = 'countdown-overlay';
-  document.body.appendChild(overlay);
-  const steps = ['3','2','1','GO!'];
-  let i = 0;
-  function next() {
-    if (i >= steps.length) { overlay.remove(); cb(); return; }
-    overlay.innerHTML = `<div class="countdown-num">${steps[i]}</div>`;
-    if (steps[i] === 'GO!') tone(880, .25, 'sine', .12);
-    else tone(440 + i*80, .18, 'square', .07);
-    i++;
-    setTimeout(next, i < steps.length ? 900 : 600);
-  }
-  next();
+// ── Grid Generation ──
+function generateTwopGrid() {
+  const cfg = DIFFICULTY[difficulty];
+  const R = twopState.rows, C = twopState.cols;
+  let att = 0, G, p1pos, p2pos, tpos;
+  do {
+    G = Array.from({length:R}, () => Array(C).fill(CELL_EMPTY));
+    // P1 left side, P2 right side
+    p1pos = {r: randInt(1, R-2), c: randInt(0, 1)};
+    p2pos = {r: randInt(1, R-2), c: randInt(C-2, C-1)};
+    if (p1pos.r === p2pos.r && p1pos.c === p2pos.c) p2pos.r = (p2pos.r + 1) % R;
+    // Treasure in middle area
+    tpos  = {r: randInt(Math.floor(R*.25), Math.floor(R*.75)), c: randInt(Math.floor(C*.3), Math.floor(C*.7))};
+    G[p1pos.r][p1pos.c] = CELL_P1;
+    G[p2pos.r][p2pos.c] = CELL_P2;
+    G[tpos.r][tpos.c]   = CELL_TREASURE;
+    placeRandomIn(G, R, C, CELL_OBSTACLE, Math.floor(cfg.obstacles * .7));
+    placeRandomIn(G, R, C, CELL_TRAP,     Math.floor(cfg.traps * .5));
+    placeRandomIn(G, R, C, CELL_MUD,      cfg.mud);
+    placeRandomIn(G, R, C, CELL_POWERUP,  cfg.powerups); // shield pickups
+    placeRandomIn(G, R, C, CELL_BOMB_PICKUP, Math.max(1, Math.floor(cfg.powerups/2)));
+    placeRandomIn(G, R, C, CELL_SPEED,    Math.max(2, Math.floor(cfg.powerups)));
+    att++;
+  } while (att < 300 && !(hasPathIn(G,R,C,p1pos,tpos) && hasPathIn(G,R,C,p2pos,tpos)));
+
+  twopState.grid = G;
+  twopState.p1.pos = p1pos;
+  twopState.p2.pos = p2pos;
+  twopState.treasurePos = tpos;
+  twopState.trapPositions = [];
+  for (let r=0;r<R;r++) for (let c=0;c<C;c++) if(G[r][c]===CELL_TRAP) twopState.trapPositions.push({r,c});
+
+  // Max distance for progress bar
+  const d1 = Math.abs(p1pos.r-tpos.r)+Math.abs(p1pos.c-tpos.c);
+  const d2 = Math.abs(p2pos.r-tpos.r)+Math.abs(p2pos.c-tpos.c);
+  twopState.maxDist = Math.max(d1, d2, 1);
 }
 
-// ── Render 2P Grid ──
+// ── Render ──
 function renderTwopGrid() {
   const gEl = document.getElementById('twop-grid');
   const {rows:R, cols:C, grid:G} = twopState;
@@ -957,35 +1016,29 @@ function renderTwopGrid() {
   for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
     const el = document.createElement('div');
     el.classList.add('cell');
-    applyTwopCellType(el, r, c, G[r][c]);
+    applyTwopCell(el, G[r][c]);
     gEl.appendChild(el);
   }
 }
 
-function applyTwopCellType(el, r, c, type) {
-  if (type === CELL_P1) {
-    el.classList.add('p1-agent');
-    el.innerHTML = `<span class="agent-avatar">🟦</span>`;
-  } else if (type === CELL_P2) {
-    el.classList.add('p2-agent');
-    el.innerHTML = `<span class="agent-avatar">🟥</span>`;
-  } else if (type === CELL_TREASURE) {
-    el.classList.add('treasure');
-    const img = document.createElement('img'); img.src='assets/treasure.png'; img.draggable=false; el.appendChild(img);
-  } else if (type === CELL_TRAP) {
-    el.classList.add('trap');
-    const img = document.createElement('img'); img.src='assets/trap.png'; img.draggable=false; el.appendChild(img);
-  } else if (type === CELL_OBSTACLE) {
-    el.classList.add('obstacle');
-    const img = document.createElement('img'); img.src='assets/obstacle.png'; img.draggable=false; el.appendChild(img);
-  } else if (type === CELL_MUD)     el.classList.add('mud');
-  else if (type === CELL_ICE)       el.classList.add('ice');
-  else if (type === CELL_POWERUP)   el.classList.add('powerup');
+function applyTwopCell(el, type) {
+  switch(type) {
+    case CELL_P1:          el.classList.add('p1-agent'); el.innerHTML=`<span class="agent-avatar">🟦</span>`; break;
+    case CELL_P2:          el.classList.add('p2-agent'); el.innerHTML=`<span class="agent-avatar">🟥</span>`; break;
+    case CELL_TREASURE:    el.classList.add('treasure'); el.innerHTML=`<img src="assets/treasure.png" draggable="false">`; break;
+    case CELL_TRAP:        el.classList.add('trap');     el.innerHTML=`<img src="assets/trap.png" draggable="false">`; break;
+    case CELL_OBSTACLE:    el.classList.add('obstacle'); el.innerHTML=`<img src="assets/obstacle.png" draggable="false">`; break;
+    case CELL_MUD:         el.classList.add('mud'); break;
+    case CELL_ICE:         el.classList.add('ice'); break;
+    case CELL_POWERUP:     el.classList.add('powerup'); el.innerHTML=`<span style="font-size:.9rem">🛡️</span>`; break;
+    case CELL_BOMB_PICKUP: el.classList.add('powerup'); el.innerHTML=`<span style="font-size:.9rem">💣</span>`; break;
+    case CELL_SPEED:       el.classList.add('speed-boost'); break;
+  }
 }
 
 function getTwopCell(r, c) {
   const gEl = document.getElementById('twop-grid');
-  return gEl.children[r * twopState.cols + c] || null;
+  return gEl?.children[r * twopState.cols + c] || null;
 }
 
 function refreshTwopCell(r, c) {
@@ -993,7 +1046,7 @@ function refreshTwopCell(r, c) {
   if (!el) return;
   el.className = 'cell';
   el.innerHTML = '';
-  applyTwopCellType(el, r, c, twopState.grid[r][c]);
+  applyTwopCell(el, twopState.grid[r][c]);
   // Re-apply trails
   if (twopState.p1.trail.some(t=>t.r===r&&t.c===c)) el.classList.add('p1-trail');
   if (twopState.p2.trail.some(t=>t.r===r&&t.c===c)) el.classList.add('p2-trail');
@@ -1004,218 +1057,312 @@ function setTwopMsg(txt, cls='') {
   el.textContent = txt; el.className = 'twop-msg ' + cls;
 }
 
-// ── HUD Update ──
+// ── HUD & Progress ──
 function updateTwopHUD() {
   const {p1, p2} = twopState;
-  document.getElementById('p1-moves').textContent = p1.moves;
-  document.getElementById('p1-score').textContent = p1.score;
-  document.getElementById('p1-lives').textContent = '❤️'.repeat(p1.lives) + '🖤'.repeat(p1.maxLives - p1.lives);
-  document.getElementById('p1-power-wrap').style.display = p1.powerup ? '' : 'none';
-  if (p1.powerup) document.getElementById('p1-power').textContent = '🛡️';
+  const setV = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = val; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  };
+  setV('p1-moves', p1.moves);
+  setV('p1-score', calcTwopScore(p1));
+  document.getElementById('p1-lives').textContent = '❤️'.repeat(Math.max(0,p1.lives)) + '🖤'.repeat(Math.max(0,p1.maxLives-p1.lives));
+  document.getElementById('p1-lives-wrap').style.display = p1.maxLives > 1 ? '' : 'none';
+  document.getElementById('p1-power-wrap').style.display = p1.shield ? '' : 'none';
+  if (p1.shield) document.getElementById('p1-power').textContent = '🛡️';
 
-  document.getElementById('p2-moves').textContent = p2.moves;
-  document.getElementById('p2-score').textContent = p2.score;
-  document.getElementById('p2-lives').textContent = '❤️'.repeat(p2.lives) + '🖤'.repeat(p2.maxLives - p2.lives);
-  document.getElementById('p2-power-wrap').style.display = p2.powerup ? '' : 'none';
-  if (p2.powerup) document.getElementById('p2-power').textContent = '🛡️';
+  setV('p2-moves', p2.moves);
+  setV('p2-score', calcTwopScore(p2));
+  document.getElementById('p2-lives').textContent = '❤️'.repeat(Math.max(0,p2.lives)) + '🖤'.repeat(Math.max(0,p2.maxLives-p2.lives));
+  document.getElementById('p2-lives-wrap').style.display = p2.maxLives > 1 ? '' : 'none';
+  document.getElementById('p2-power-wrap').style.display = p2.shield ? '' : 'none';
+  if (p2.shield) document.getElementById('p2-power').textContent = '🛡️';
+}
+
+function updateProgressBars() {
+  const {p1, p2, treasurePos, maxDist} = twopState;
+  const d1 = Math.abs(p1.pos.r - treasurePos.r) + Math.abs(p1.pos.c - treasurePos.c);
+  const d2 = Math.abs(p2.pos.r - treasurePos.r) + Math.abs(p2.pos.c - treasurePos.c);
+  const pct1 = Math.max(0, Math.min(100, Math.round((1 - d1/maxDist)*100)));
+  const pct2 = Math.max(0, Math.min(100, Math.round((1 - d2/maxDist)*100)));
+  const bar1 = document.getElementById('p1-progress');
+  const bar2 = document.getElementById('p2-progress');
+  const dist1 = document.getElementById('p1-dist');
+  const dist2 = document.getElementById('p2-dist');
+  if (bar1) bar1.style.width = pct1 + '%';
+  if (bar2) bar2.style.width = pct2 + '%';
+  if (dist1) dist1.textContent = d1 + ' steps';
+  if (dist2) dist2.textContent = d2 + ' steps';
+}
+
+function resetBombBtns() {
+  const b1 = document.getElementById('p1-bomb-btn');
+  const b2 = document.getElementById('p2-bomb-btn');
+  if (b1) { b1.textContent = `💣 Bomb (${twopState.p1.bombs})`; b1.disabled = twopState.p1.bombs <= 0; }
+  if (b2) { b2.textContent = `💣 Bomb (${twopState.p2.bombs})`; b2.disabled = twopState.p2.bombs <= 0; }
 }
 
 function calcTwopScore(p) {
-  const diffBonus = {easy:0, medium:100, hard:200, extreme:400}[difficulty] || 0;
-  return Math.max(0, Math.round(1000 - p.moves * 5 - twopState.elapsed * 2 + (p.lives/p.maxLives)*150 + diffBonus));
+  const diffBonus = {easy:0,medium:100,hard:200,extreme:400}[difficulty]||0;
+  return Math.max(0, Math.round(1000 - p.moves*4 - twopState.elapsed*2 + (p.lives/Math.max(1,p.maxLives))*150 + diffBonus));
 }
 
-// ── Player Move Logic ──
+// ── Bomb ability ──
+function useBomb(playerKey) {
+  if (!twopState.active) return;
+  const p = twopState[playerKey];
+  const other = twopState[playerKey==='p1'?'p2':'p1'];
+  if (!p.alive || p.bombs <= 0) return;
+
+  p.bombs--;
+  resetBombBtns();
+
+  // Blast clears 3×3 area around player — destroys traps and stuns opponent
+  const {pos, } = p;
+  const blastCells = [];
+  for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {
+    const nr=pos.r+dr, nc=pos.c+dc;
+    if (!inB(nr,nc)||twopState.grid[nr][nc]===CELL_OBSTACLE) continue;
+    blastCells.push({r:nr,c:nc});
+  }
+
+  // Visual blast
+  blastCells.forEach(({r,c}) => {
+    const el = getTwopCell(r,c);
+    if (el) { el.classList.add('bomb-cell'); setTimeout(()=>el.classList.remove('bomb-cell'),700); }
+  });
+
+  // Destroy traps in blast zone
+  blastCells.forEach(({r,c}) => {
+    if (twopState.grid[r][c] === CELL_TRAP) {
+      twopState.grid[r][c] = CELL_EMPTY;
+      twopState.trapPositions = twopState.trapPositions.filter(t=>!(t.r===r&&t.c===c));
+      refreshTwopCell(r,c);
+    }
+  });
+
+  // Stun opponent if in blast radius
+  const inBlast = blastCells.some(({r,c}) => r===other.pos.r && c===other.pos.c);
+  if (inBlast && other.alive) {
+    other.stunned = true;
+    const oKey = playerKey==='p1'?'p2':'p1';
+    setTwopMsg(`💥 ${playerKey.toUpperCase()} BOMB stunned ${oKey.toUpperCase()} for 2 moves!`, playerKey==='p1'?'p1-win':'p2-win');
+    other.stunMoves = 2;
+    const cel = getTwopCell(other.pos.r, other.pos.c);
+    if (cel) { cel.classList.add('danger-flash'); }
+    sfxTrap();
+  } else {
+    setTwopMsg(`💣 ${playerKey.toUpperCase()} used a bomb! Traps cleared!`);
+    tone(200,.2,'sawtooth',.08); setTimeout(()=>tone(350,.15,'square',.06),150);
+  }
+  updateProgressBars();
+}
+
+// ── Movement ──
+function twopTouch(playerKey, dr, dc, e) {
+  e.preventDefault();
+  twopMove(playerKey, dr, dc);
+}
+
 function twopMove(playerKey, dr, dc) {
   if (!twopState.active) return;
   const p = twopState[playerKey];
   if (!p.alive) return;
 
-  const {rows:R, cols:C, grid:G} = twopState;
-  const nr = p.pos.r + dr, nc = p.pos.c + dc;
-  if (nr < 0 || nr >= R || nc < 0 || nc >= C) return;
-
-  const dest = G[nr][nc];
-  if (dest === CELL_OBSTACLE) return;
-  // Can't walk into other player's cell (bump)
-  const otherKey = playerKey === 'p1' ? 'p2' : 'p1';
-  const other = twopState[otherKey];
-  if (other.alive && other.pos.r === nr && other.pos.c === nc) {
-    setTwopMsg(`💥 Players collide! Can't move there!`);
-    tone(300, .1, 'square', .05);
+  // Stun check
+  if (p.stunMoves > 0) {
+    p.stunMoves--;
+    setTwopMsg(`😵 ${playerKey.toUpperCase()} is stunned! (${p.stunMoves} moves left)`);
+    tone(300,.08,'square',.04);
     return;
   }
 
-  // Move
-  const oldR = p.pos.r, oldC = p.pos.c;
-  G[oldR][oldC] = CELL_EMPTY;
-  p.trail.push({r:oldR, c:oldC});
-  if (p.trail.length > 6) p.trail.shift();
-  refreshTwopCell(oldR, oldC);
+  const {rows:R, cols:C, grid:G} = twopState;
+  const nr = p.pos.r + dr, nc = p.pos.c + dc;
+  if (nr<0||nr>=R||nc<0||nc>=C) return;
+  const dest = G[nr][nc];
+  if (dest === CELL_OBSTACLE) return;
 
-  p.pos = {r:nr, c:nc};
+  // Collision with other player — push them back 1
+  const otherKey = playerKey==='p1'?'p2':'p1';
+  const other = twopState[otherKey];
+  if (other.alive && other.pos.r===nr && other.pos.c===nc) {
+    // Push other player in same direction
+    const pr=nr+dr, pc=nc+dc;
+    if (inB(pr,pc) && G[pr][pc]!==CELL_OBSTACLE && !(pr===p.pos.r&&pc===p.pos.c)) {
+      // Can push
+      G[other.pos.r][other.pos.c] = CELL_EMPTY;
+      refreshTwopCell(other.pos.r, other.pos.c);
+      other.pos = {r:pr,c:pc};
+      G[pr][pc] = otherKey==='p1'?CELL_P1:CELL_P2;
+      refreshTwopCell(pr,pc);
+      setTwopMsg(`💥 ${playerKey.toUpperCase()} shoved ${otherKey.toUpperCase()}!`);
+      tone(400,.1,'square',.06);
+    } else {
+      setTwopMsg(`🚧 Blocked by ${otherKey.toUpperCase()}!`);
+      tone(250,.08,'square',.04);
+      return;
+    }
+  }
+
+  // Move player
+  const oldR=p.pos.r, oldC=p.pos.c;
+  G[oldR][oldC] = CELL_EMPTY;
+  p.trail.push({r:oldR,c:oldC});
+  if (p.trail.length > 5) p.trail.shift();
+  refreshTwopCell(oldR,oldC);
+
+  p.pos = {r:nr,c:nc};
   p.moves++;
 
   // Handle destination
   if (dest === CELL_TREASURE) {
-    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
-    refreshTwopCell(nr, nc);
-    p.score = calcTwopScore(p);
-    updateTwopHUD();
-    endTwoPlayerGame(playerKey, 'treasure');
+    G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
+    refreshTwopCell(nr,nc);
+    updateTwopHUD(); updateProgressBars();
+    endTwoPlayerGame(playerKey,'treasure');
     return;
   }
-
   if (dest === CELL_TRAP) {
-    if (p.powerup === 'shield') {
-      p.powerup = null;
-      setTwopMsg(`🛡️ ${playerKey.toUpperCase()} shield blocked the trap!`);
-      G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+    if (p.shield) {
+      p.shield = false;
+      setTwopMsg(`🛡️ ${playerKey.toUpperCase()}'s shield blocked the trap!`);
+      G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
       twopState.trapPositions = twopState.trapPositions.filter(t=>!(t.r===nr&&t.c===nc));
     } else {
       p.lives--;
       sfxTrap();
-      const el = getTwopCell(nr, nc);
-      if (el) el.classList.add('danger-flash');
+      const el=getTwopCell(nr,nc); if(el) el.classList.add('danger-flash');
       if (p.lives <= 0) {
         p.alive = false;
-        p.pos = {r:oldR, c:oldC}; // stay in old pos for display
-        G[oldR][oldC] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
-        refreshTwopCell(oldR, oldC);
-        document.getElementById(`twop-badge-${playerKey}`).textContent = `${playerKey.toUpperCase()} 💀`;
-        document.getElementById(`twop-badge-${playerKey}`).classList.add('eliminated');
-        setTwopMsg(`💀 ${playerKey.toUpperCase()} eliminated!`, playerKey==='p1'?'p2-win':'p1-win');
-        p.score = 0;
-        updateTwopHUD();
-        // Check if other player also dead
-        if (!other.alive) { endTwoPlayerGame(null, 'both-dead'); return; }
-        // Other player wins by survival
-        setTimeout(() => endTwoPlayerGame(otherKey, 'survival'), 1200);
+        G[nr][nc] = CELL_EMPTY; refreshTwopCell(nr,nc);
+        // Snap back
+        p.pos = {r:oldR,c:oldC}; G[oldR][oldC]=playerKey==='p1'?CELL_P1:CELL_P2; refreshTwopCell(oldR,oldC);
+        updateTwopHUD(); updateProgressBars();
+        if (!other.alive) { endTwoPlayerGame(null,'both-dead'); return; }
+        setTimeout(()=>endTwoPlayerGame(otherKey,'survival'),1200);
         return;
       } else {
         sfxLoseLife();
-        setTwopMsg(`💥 ${playerKey.toUpperCase()} hit a trap! ${p.lives} lives left`);
-        G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+        setTwopMsg(`💥 ${playerKey.toUpperCase()} lost a life! (${p.lives} left)`);
+        G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
         twopState.trapPositions = twopState.trapPositions.filter(t=>!(t.r===nr&&t.c===nc));
       }
     }
-  } else if (dest === CELL_POWERUP) {
-    p.powerup = 'shield';
+  } else if (dest === CELL_POWERUP) { // shield
+    p.shield = true;
     sfxPowerup();
-    setTwopMsg(`⚡ ${playerKey.toUpperCase()} picked up a shield!`);
-    const el = getTwopCell(nr, nc);
-    if (el) fxBurst(el, playerKey==='p1'?'#44aaff':'#ff5050', 10);
-    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+    setTwopMsg(`🛡️ ${playerKey.toUpperCase()} picked up a shield!`);
+    const el=getTwopCell(nr,nc); if(el) fxBurst(el,playerKey==='p1'?'#44aaff':'#ff5050',10);
+    G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
+  } else if (dest === CELL_BOMB_PICKUP) {
+    p.bombs++;
+    tone(600,.1,'sine',.08); setTimeout(()=>tone(800,.12,'sine',.06),100);
+    setTwopMsg(`💣 ${playerKey.toUpperCase()} found a bomb! (${p.bombs} total)`);
+    resetBombBtns();
+    G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
+  } else if (dest === CELL_SPEED) {
+    p.speedMoves += 4; // 4 extra instant-moves
+    sfxPowerup();
+    setTwopMsg(`🏃 ${playerKey.toUpperCase()} speed boost! (+4 instant moves)`);
+    const el=getTwopCell(nr,nc); if(el) fxBurst(el,'#00ff88',8);
+    G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
   } else if (dest === CELL_MUD) {
     sfxMud();
-    setTwopMsg(`🟫 ${playerKey.toUpperCase()} is stuck in mud!`);
-    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+    setTwopMsg(`🟫 ${playerKey.toUpperCase()} is in mud — slowed!`);
+    G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
   } else {
     sfxMove();
-    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+    G[nr][nc] = playerKey==='p1'?CELL_P1:CELL_P2;
   }
 
-  p.score = calcTwopScore(p);
-  refreshTwopCell(nr, nc);
+  refreshTwopCell(nr,nc);
   updateTwopHUD();
+  updateProgressBars();
 }
 
-// ── End 2P Game ──
+// ── End game ──
 function endTwoPlayerGame(winnerKey, reason) {
   twopState.active = false;
   clearInterval(twopState.timerInterval);
+  twopState.winner = winnerKey;
 
-  const {p1, p2} = twopState;
-  p1.score = calcTwopScore(p1);
-  p2.score = calcTwopScore(p2);
-
-  // FX
-  if (winnerKey === 'p1') {
-    const el = getTwopCell(p1.pos.r, p1.pos.c);
-    if (el) fxBurst(el, '#44aaff', 16);
-    sfxWin();
-  } else if (winnerKey === 'p2') {
-    const el = getTwopCell(p2.pos.r, p2.pos.c);
-    if (el) fxBurst(el, '#ff5050', 16);
+  if (winnerKey) {
+    const wp = twopState[winnerKey];
+    const wCell = getTwopCell(wp.pos.r, wp.pos.c);
+    if (wCell) fxBurst(wCell, winnerKey==='p1'?'#44aaff':'#ff5050', 18);
     sfxWin();
   }
-
-  setTimeout(() => showTwopEnd(winnerKey, reason), 600);
+  setTimeout(() => showTwopEnd(winnerKey, reason), 700);
 }
 
 function showTwopEnd(winnerKey, reason) {
   const {p1, p2} = twopState;
-  const endScr = document.getElementById('twop-end-screen');
-  endScr.classList.remove('hidden');
+  const sc = document.getElementById('twop-end-screen');
+  sc.classList.remove('hidden');
 
   let emoji, title, sub;
-  if (!winnerKey || reason === 'both-dead') {
-    emoji='😵'; title='Both Eliminated!'; sub='Nobody survived the traps!';
-  } else if (reason === 'treasure') {
-    const name = winnerKey === 'p1' ? '🟦 Player 1' : '🟥 Player 2';
+  if (!winnerKey) { emoji='😵'; title='Both Eliminated!'; sub='Traps claimed both explorers!'; }
+  else if (reason === 'treasure') {
+    const name = winnerKey==='p1'?'🟦 Player 1':'🟥 Player 2';
     emoji='🏆'; title=`${name} Wins!`; sub='First to reach the treasure!';
-  } else if (reason === 'survival') {
-    const name = winnerKey === 'p1' ? '🟦 Player 1' : '🟥 Player 2';
-    emoji='💀'; title=`${name} Wins!`; sub='Last survivor wins!';
+  } else {
+    const name = winnerKey==='p1'?'🟦 Player 1':'🟥 Player 2';
+    emoji='💀'; title=`${name} Wins!`; sub='Last one standing!';
   }
 
   document.getElementById('twop-end-emoji').textContent = emoji;
   document.getElementById('twop-end-title').textContent = title;
   document.getElementById('twop-end-sub').textContent = sub;
 
-  // Stats
   document.getElementById('tpr-p1-moves').textContent = p1.moves;
-  document.getElementById('tpr-p1-score').textContent = p1.score;
-  document.getElementById('tpr-p1-status').textContent = p1.alive ? (winnerKey==='p1'?'🏆 WON':'Still going') : '💀 Out';
-
+  document.getElementById('tpr-p1-score').textContent = calcTwopScore(p1);
+  document.getElementById('tpr-p1-status').textContent = !p1.alive?'💀 Out':(winnerKey==='p1'?'🏆 WON':'Still going');
   document.getElementById('tpr-p2-moves').textContent = p2.moves;
-  document.getElementById('tpr-p2-score').textContent = p2.score;
-  document.getElementById('tpr-p2-status').textContent = p2.alive ? (winnerKey==='p2'?'🏆 WON':'Still going') : '💀 Out';
+  document.getElementById('tpr-p2-score').textContent = calcTwopScore(p2);
+  document.getElementById('tpr-p2-status').textContent = !p2.alive?'💀 Out':(winnerKey==='p2'?'🏆 WON':'Still going');
 
-  // Highlight winner card
   document.getElementById('twop-p1-result').classList.toggle('winner', winnerKey==='p1');
   document.getElementById('twop-p2-result').classList.toggle('winner', winnerKey==='p2');
 
-  // Save score
-  if (winnerKey) {
-    const wp = winnerKey === 'p1' ? p1 : p2;
-    addScore(wp.score, difficulty, '2P');
-  }
+  if (winnerKey) addScore(calcTwopScore(twopState[winnerKey]), difficulty, '2P');
 }
 
-// ── Keyboard: 2P Controls ──
+// ── Keyboard ──
 document.addEventListener('keydown', e => {
   if (!twopState.active) return;
-  const p1map = { w:[-1,0], W:[-1,0], s:[1,0], S:[1,0], a:[0,-1], A:[0,-1], d:[0,1], D:[0,1] };
-  const p2map = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
-  if (p1map[e.key]) { e.preventDefault(); twopMove('p1', p1map[e.key][0], p1map[e.key][1]); }
-  else if (p2map[e.key]) { e.preventDefault(); twopMove('p2', p2map[e.key][0], p2map[e.key][1]); }
+  const p1map = { w:[-1,0],W:[-1,0],s:[1,0],S:[1,0],a:[0,-1],A:[0,-1],d:[0,1],D:[0,1] };
+  const p2map = { ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1] };
+  if (p1map[e.key]) { e.preventDefault(); twopMove('p1',p1map[e.key][0],p1map[e.key][1]); }
+  else if (p2map[e.key]) { e.preventDefault(); twopMove('p2',p2map[e.key][0],p2map[e.key][1]); }
 });
 
-// ── Mobile D-Pad: 2P ──
-document.getElementById('p1-up')?.addEventListener('click',    () => twopMove('p1',-1,0));
-document.getElementById('p1-down')?.addEventListener('click',  () => twopMove('p1',1,0));
-document.getElementById('p1-left')?.addEventListener('click',  () => twopMove('p1',0,-1));
-document.getElementById('p1-right')?.addEventListener('click', () => twopMove('p1',0,1));
-document.getElementById('p2-up')?.addEventListener('click',    () => twopMove('p2',-1,0));
-document.getElementById('p2-down')?.addEventListener('click',  () => twopMove('p2',1,0));
-document.getElementById('p2-left')?.addEventListener('click',  () => twopMove('p2',0,-1));
-document.getElementById('p2-right')?.addEventListener('click', () => twopMove('p2',0,1));
+// ── Countdown ──
+function showCountdown(cb) {
+  const overlay = document.createElement('div');
+  overlay.className = 'countdown-overlay';
+  document.body.appendChild(overlay);
+  const steps = ['3','2','1','GO!'];
+  let i = 0;
+  function next() {
+    if (i >= steps.length) { overlay.remove(); cb(); return; }
+    overlay.innerHTML = `<div class="countdown-num">${steps[i]}</div>`;
+    tone(steps[i]==='GO!'?880:380+i*80, .18, steps[i]==='GO!'?'sine':'square', .08);
+    i++;
+    setTimeout(next, i<=steps.length?850:500);
+  }
+  next();
+}
 
 // ── Buttons ──
-document.getElementById('splash-2p')?.addEventListener('click', () => launchTwoPlayer());
-
+document.getElementById('splash-2p')?.addEventListener('click', launchTwoPlayer);
 document.getElementById('btn-twop-back')?.addEventListener('click', () => {
-  clearInterval(twopState.timerInterval);
-  twopState.active = false;
-  document.getElementById('twop-screen').classList.add('hidden');
-  goToMenu();
+  clearInterval(twopState.timerInterval); twopState.active=false;
+  document.getElementById('twop-screen').classList.add('hidden'); goToMenu();
 });
 document.getElementById('btn-twop-menu')?.addEventListener('click', () => {
-  clearInterval(twopState.timerInterval);
-  twopState.active = false;
-  document.getElementById('twop-screen').classList.add('hidden');
-  goToMenu();
+  clearInterval(twopState.timerInterval); twopState.active=false;
+  document.getElementById('twop-screen').classList.add('hidden'); goToMenu();
 });
 document.getElementById('btn-twop-restart')?.addEventListener('click', () => {
   document.getElementById('twop-end-screen').classList.add('hidden');
@@ -1230,3 +1377,486 @@ document.getElementById('twop-end-menu')?.addEventListener('click', () => {
   document.getElementById('twop-screen').classList.add('hidden');
   goToMenu();
 });
+
+// ══════════════════════════════════════════
+// ONLINE MULTIPLAYER — PeerJS Room Codes
+// ══════════════════════════════════════════
+
+const WORDS = ['TIGER','STORM','BLAZE','SWIFT','COBRA','NINJA','FLASH','RAVEN','PHOENIX','DRAGON','WOLF','HAWK','VIPER','GHOST','SHADOW'];
+
+let onlinePeer = null;
+let onlineConn = null;
+let onlineRole = null;   // 'host' | 'guest'
+let myOnlineKey = null;  // 'p1' | 'p2'
+let onlineGameState = {
+  grid:[], rows:0, cols:0, treasurePos:{r:0,c:0},
+  p1:{pos:{r:0,c:0},moves:0,lives:1,maxLives:1,score:1000,powerup:null,alive:true},
+  p2:{pos:{r:0,c:0},moves:0,lives:1,maxLives:1,score:1000,powerup:null,alive:true},
+  trapPositions:[],
+  active:false, elapsed:0
+};
+let onlineTimerInterval = null;
+
+function makeRoomCode(){
+  const word = WORDS[Math.floor(Math.random()*WORDS.length)];
+  const num  = Math.floor(1000+Math.random()*9000);
+  return `${word}-${num}`;
+}
+
+function launchOnline(){
+  ensureAudio();
+  splashScreen.classList.add('hide-out');
+  setTimeout(()=>{
+    splashScreen.classList.add('hidden');
+    document.getElementById('online-screen').classList.remove('hidden');
+    initPeer();
+  },350);
+}
+
+function initPeer(){
+  setBadge('CONNECTING…','');
+  if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
+  onlinePeer = new Peer(undefined, {debug:0});
+
+  onlinePeer.on('open', id=>{
+    setBadge('ONLINE','connected');
+    // Auto-fill room code from URL if present
+    const params = new URLSearchParams(location.search);
+    const codeParam = params.get('room');
+    if(codeParam){
+      showJoinTab();
+      document.getElementById('room-code-input').value = codeParam;
+      document.getElementById('join-status').innerHTML = `<span class="status-dot waiting"></span> Room code pre-filled — click Join!`;
+    }
+  });
+
+  onlinePeer.on('connection', conn=>{
+    // Someone joined our room
+    onlineConn = conn;
+    onlineRole = 'host';
+    myOnlineKey = 'p1';
+    setupConnection(conn);
+    document.getElementById('p2-join-slot').textContent = '🟥 Opponent joined!';
+    document.getElementById('p2-join-slot').classList.add('joined');
+    document.getElementById('create-status').innerHTML = `<span class="status-dot connected"></span> Opponent connected! Starting…`;
+    setTimeout(()=>startOnlineGame(), 1200);
+  });
+
+  onlinePeer.on('error', err=>{
+    setBadge('ERROR','error');
+    document.getElementById('join-status').innerHTML = `<span class="status-dot error"></span> Connection error: ${err.type}`;
+  });
+
+  onlinePeer.on('disconnected',()=>{ try{onlinePeer.reconnect();}catch(e){} });
+}
+
+function setupConnection(conn){
+  conn.on('data', handleOnlineMessage);
+  conn.on('close', ()=>{
+    showDisconnectBanner('Opponent disconnected!');
+    onlineGameState.active = false;
+    clearInterval(onlineTimerInterval);
+  });
+  conn.on('error', err=>console.warn('conn error',err));
+}
+
+function handleOnlineMessage(msg){
+  if(msg.type==='move'){
+    applyOpponentMove(msg.dr, msg.dc);
+  } else if(msg.type==='start'){
+    // Guest receives grid from host
+    onlineGameState = msg.state;
+    renderOnlineGrid();
+    updateOnlineHUD();
+    document.getElementById('online-lobby').classList.add('hidden');
+    document.getElementById('online-game-wrap').classList.remove('hidden');
+    showCountdownOnline(()=>{
+      onlineGameState.active = true;
+      setOnlineMsg('🏃 Race to the treasure!');
+      onlineTimerInterval = setInterval(()=>{
+        onlineGameState.elapsed++;
+        document.getElementById('online-timer').textContent = fmtT(onlineGameState.elapsed);
+      },1000);
+    });
+  } else if(msg.type==='restart'){
+    onlineGameState = msg.state;
+    renderOnlineGrid();
+    updateOnlineHUD();
+    showCountdownOnline(()=>{
+      onlineGameState.active = true;
+      setOnlineMsg('🏃 Race to the treasure!');
+    });
+  } else if(msg.type==='end'){
+    onlineGameState.active = false;
+    clearInterval(onlineTimerInterval);
+  }
+}
+
+function startOnlineGame(){
+  const cfg = DIFFICULTY[difficulty];
+  const state = buildOnlineGameState(cfg);
+  onlineGameState = state;
+
+  // Send to guest
+  safeSend({type:'start', state});
+
+  document.getElementById('online-lobby').classList.add('hidden');
+  document.getElementById('online-game-wrap').classList.remove('hidden');
+  renderOnlineGrid();
+  updateOnlineHUD();
+
+  showCountdownOnline(()=>{
+    onlineGameState.active = true;
+    setOnlineMsg('🏃 Race to the treasure!');
+    onlineTimerInterval = setInterval(()=>{
+      onlineGameState.elapsed++;
+      document.getElementById('online-timer').textContent = fmtT(onlineGameState.elapsed);
+    },1000);
+  });
+}
+
+function buildOnlineGameState(cfg){
+  let G, p1pos, p2pos, treasure, traps;
+  let att=0;
+  const R=cfg.rows, C=cfg.cols;
+  do {
+    G = Array.from({length:R},()=>Array(C).fill(CELL_EMPTY));
+    p1pos = {r:randInt(1,R-2), c:0};
+    p2pos = {r:randInt(1,R-2), c:C-1};
+    G[p1pos.r][p1pos.c] = CELL_P1;
+    G[p2pos.r][p2pos.c] = CELL_P2;
+    treasure = {r:randInt(Math.floor(R*.3),Math.floor(R*.7)), c:randInt(Math.floor(C*.3),Math.floor(C*.7))};
+    G[treasure.r][treasure.c] = CELL_TREASURE;
+    placeRandomIn(G,R,C,CELL_OBSTACLE,cfg.obstacles);
+    placeRandomIn(G,R,C,CELL_TRAP,Math.floor(cfg.traps*.6));
+    placeRandomIn(G,R,C,CELL_MUD,cfg.mud);
+    placeRandomIn(G,R,C,CELL_POWERUP,cfg.powerups);
+    att++;
+  } while(att<200 && !(hasPathIn(G,R,C,p1pos,treasure)&&hasPathIn(G,R,C,p2pos,treasure)));
+
+  traps=[];
+  for(let r=0;r<R;r++) for(let c=0;c<C;c++) if(G[r][c]===CELL_TRAP) traps.push({r,c});
+
+  return {
+    grid:G, rows:R, cols:C, treasurePos:treasure, trapPositions:traps,
+    p1:{pos:p1pos, moves:0, lives:cfg.lives, maxLives:cfg.lives, score:1000, powerup:null, alive:true},
+    p2:{pos:p2pos, moves:0, lives:cfg.lives, maxLives:cfg.lives, score:1000, powerup:null, alive:true},
+    active:false, elapsed:0
+  };
+}
+
+// ── Online Grid Rendering ──
+function renderOnlineGrid(){
+  const gEl = document.getElementById('online-grid');
+  const {rows:R,cols:C,grid:G} = onlineGameState;
+  gEl.innerHTML='';
+  gEl.style.gridTemplateColumns=`repeat(${C},var(--cell))`;
+  gEl.style.gridTemplateRows=`repeat(${R},var(--cell))`;
+  for(let r=0;r<R;r++) for(let c=0;c<C;c++){
+    const el=document.createElement('div'); el.classList.add('cell');
+    applyTwopCellType(el,r,c,G[r][c]);
+    gEl.appendChild(el);
+  }
+}
+
+function getOnlineCell(r,c){
+  const gEl=document.getElementById('online-grid');
+  return gEl.children[r*onlineGameState.cols+c]||null;
+}
+
+function refreshOnlineCell(r,c){
+  const el=getOnlineCell(r,c); if(!el) return;
+  el.className='cell'; el.innerHTML='';
+  applyTwopCellType(el,r,c,onlineGameState.grid[r][c]);
+}
+
+// ── Online HUD ──
+function updateOnlineHUD(){
+  const {p1,p2,rows,cols} = onlineGameState;
+  const me = myOnlineKey==='p1'?p1:p2;
+  const opp = myOnlineKey==='p1'?p2:p1;
+
+  document.getElementById('op1-moves').textContent = me.moves;
+  document.getElementById('op1-score').textContent = me.score;
+  document.getElementById('op1-lives').textContent = '❤️'.repeat(me.lives)+'🖤'.repeat(me.maxLives-me.lives);
+  document.getElementById('op1-lives-wrap').style.display = me.maxLives>1?'':'none';
+
+  document.getElementById('op2-moves').textContent = opp.moves;
+  document.getElementById('op2-score').textContent = opp.score;
+  document.getElementById('op2-lives').textContent = '❤️'.repeat(opp.lives)+'🖤'.repeat(opp.maxLives-opp.lives);
+  document.getElementById('op2-lives-wrap').style.display = opp.maxLives>1?'':'none';
+}
+
+function setOnlineMsg(txt,cls=''){
+  const el=document.getElementById('online-message');
+  el.textContent=txt; el.className='twop-msg '+cls;
+}
+
+// ── My Move ──
+function onlineMove(dr,dc){
+  if(!onlineGameState.active) return;
+  const pk = myOnlineKey;
+  const p = onlineGameState[pk];
+  if(!p.alive) return;
+
+  const {rows:R,cols:C,grid:G} = onlineGameState;
+  const nr=p.pos.r+dr, nc=p.pos.c+dc;
+  if(nr<0||nr>=R||nc<0||nc>=C) return;
+  const dest=G[nr][nc];
+  if(dest===CELL_OBSTACLE) return;
+
+  const oppKey = pk==='p1'?'p2':'p1';
+  const opp = onlineGameState[oppKey];
+  if(opp.alive && opp.pos.r===nr && opp.pos.c===nc){ setOnlineMsg('💥 Blocked by opponent!'); return; }
+
+  // Apply locally
+  applyOnlineMove(pk,dr,dc,true);
+  // Send to peer
+  safeSend({type:'move',dr,dc});
+}
+
+function applyOnlineMove(pk,dr,dc,isMe){
+  const p = onlineGameState[pk];
+  if(!p.alive) return;
+  const {rows:R,cols:C,grid:G} = onlineGameState;
+  const nr=p.pos.r+dr, nc=p.pos.c+dc;
+  if(nr<0||nr>=R||nc<0||nc>=C) return;
+  const dest=G[nr][nc];
+  if(dest===CELL_OBSTACLE) return;
+
+  const oppKey = pk==='p1'?'p2':'p1';
+  const opp = onlineGameState[oppKey];
+  if(opp.alive && opp.pos.r===nr && opp.pos.c===nc) return;
+
+  const oldR=p.pos.r, oldC=p.pos.c;
+  G[oldR][oldC]=CELL_EMPTY; refreshOnlineCell(oldR,oldC);
+  p.pos={r:nr,c:nc}; p.moves++;
+
+  if(dest===CELL_TREASURE){
+    G[nr][nc]=pk===CELL_P1?CELL_P1:pk==='p1'?CELL_P1:CELL_P2;
+    refreshOnlineCell(nr,nc);
+    p.score=calcOnlineScore(p);
+    updateOnlineHUD();
+    endOnlineGame(pk,'treasure');
+    return;
+  } else if(dest===CELL_TRAP){
+    if(p.powerup==='shield'){
+      p.powerup=null;
+      if(isMe) setOnlineMsg('🛡️ Shield blocked the trap!');
+      G[nr][nc]=pk==='p1'?CELL_P1:CELL_P2;
+      onlineGameState.trapPositions=onlineGameState.trapPositions.filter(t=>!(t.r===nr&&t.c===nc));
+    } else {
+      p.lives--;
+      const el=getOnlineCell(nr,nc); if(el) el.classList.add('danger-flash');
+      if(p.lives<=0){
+        p.alive=false; G[oldR][oldC]=pk==='p1'?CELL_P1:CELL_P2; refreshOnlineCell(oldR,oldC);
+        if(isMe) setOnlineMsg(`💀 You were eliminated!`,'p2-win');
+        p.score=0; updateOnlineHUD();
+        if(!opp.alive){ endOnlineGame(null,'both-dead'); return; }
+        setTimeout(()=>endOnlineGame(oppKey,'survival'),1000);
+        return;
+      } else {
+        if(isMe) setOnlineMsg(`💥 Trap! ${p.lives} lives left`);
+        sfxLoseLife();
+        G[nr][nc]=pk==='p1'?CELL_P1:CELL_P2;
+        onlineGameState.trapPositions=onlineGameState.trapPositions.filter(t=>!(t.r===nr&&t.c===nc));
+      }
+    }
+  } else if(dest===CELL_POWERUP){
+    p.powerup='shield';
+    if(isMe){ sfxPowerup(); setOnlineMsg('⚡ Shield activated!'); }
+    G[nr][nc]=pk==='p1'?CELL_P1:CELL_P2;
+  } else if(dest===CELL_MUD){
+    if(isMe){ sfxMud(); setOnlineMsg('🟫 Stuck in mud!'); }
+    G[nr][nc]=pk==='p1'?CELL_P1:CELL_P2;
+  } else {
+    if(isMe) sfxMove();
+    G[nr][nc]=pk==='p1'?CELL_P1:CELL_P2;
+  }
+
+  p.score=calcOnlineScore(p);
+  refreshOnlineCell(nr,nc);
+  updateOnlineHUD();
+}
+
+function applyOpponentMove(dr,dc){
+  const oppKey = myOnlineKey==='p1'?'p2':'p1';
+  applyOnlineMove(oppKey,dr,dc,false);
+}
+
+function calcOnlineScore(p){
+  const diffBonus={easy:0,medium:100,hard:200,extreme:400}[difficulty]||0;
+  return Math.max(0,Math.round(1000-p.moves*5-onlineGameState.elapsed*2+(p.lives/p.maxLives)*150+diffBonus));
+}
+
+function endOnlineGame(winnerKey,reason){
+  onlineGameState.active=false;
+  clearInterval(onlineTimerInterval);
+  safeSend({type:'end'});
+
+  const me = onlineGameState[myOnlineKey];
+  const oppKey = myOnlineKey==='p1'?'p2':'p1';
+  const opp = onlineGameState[oppKey];
+  const iWon = winnerKey===myOnlineKey;
+
+  if(iWon){ const el=getOnlineCell(me.pos.r,me.pos.c); if(el) fxBurst(el,'#44aaff',16); sfxWin(); }
+
+  setTimeout(()=>{
+    let msg='';
+    if(!winnerKey||reason==='both-dead') msg='😵 Both eliminated — draw!';
+    else if(iWon && reason==='treasure') msg='🏆 YOU WIN! First to the treasure!';
+    else if(!iWon && reason==='treasure') msg='💀 Opponent reached the treasure first!';
+    else if(iWon && reason==='survival') msg='🏆 YOU WIN! Last survivor!';
+    else msg='💀 You were eliminated. Opponent wins!';
+    setOnlineMsg(msg, iWon?'p1-win':'p2-win');
+    addScore(me.score, difficulty, 'ONLINE');
+  },500);
+}
+
+function calcOnlineScore2(p){return Math.max(0,Math.round(1000-p.moves*5-onlineGameState.elapsed*2+(p.lives/p.maxLives)*150));}
+
+function showCountdownOnline(cb){ showCountdown(cb); }
+
+function safeSend(data){
+  try{ if(onlineConn && onlineConn.open) onlineConn.send(data); }catch(e){}
+}
+
+function showDisconnectBanner(msg){
+  const b=document.createElement('div'); b.className='disconnect-banner'; b.textContent='⚠️ '+msg;
+  document.body.appendChild(b); setTimeout(()=>b.remove(),4000);
+}
+
+// ── Join via code ──
+function joinRoom(code){
+  const cleanCode = code.trim().toUpperCase();
+  if(!cleanCode){ return; }
+  document.getElementById('join-status').innerHTML=`<span class="status-dot waiting"></span> Connecting to ${cleanCode}…`;
+
+  // Map room code to a peer ID via hash
+  const peerId = 'TH-'+cleanCode;
+  const conn = onlinePeer.connect(peerId, {reliable:true, serialization:'json'});
+  onlineConn = conn;
+  onlineRole = 'guest';
+  myOnlineKey = 'p2';
+
+  conn.on('open',()=>{
+    document.getElementById('join-status').innerHTML=`<span class="status-dot connected"></span> Connected! Waiting for host to start…`;
+    setupConnection(conn);
+  });
+  conn.on('error',err=>{
+    document.getElementById('join-status').innerHTML=`<span class="status-dot error"></span> Could not connect — check the code and try again`;
+  });
+}
+
+// When creating a room, register with a human-readable peer ID
+function createRoom(){
+  const code = makeRoomCode();
+  const peerId = 'TH-'+code;
+  // Re-init peer with custom ID
+  if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
+  setBadge('CONNECTING…','');
+  onlinePeer = new Peer(peerId, {debug:0});
+  onlinePeer.on('open',id=>{
+    setBadge('ONLINE','connected');
+    document.getElementById('room-code-text').textContent = code;
+    onlineRole='host'; myOnlineKey='p1';
+  });
+  onlinePeer.on('connection', conn=>{
+    onlineConn=conn; setupConnection(conn);
+    document.getElementById('p2-join-slot').textContent='🟥 Opponent joined!';
+    document.getElementById('p2-join-slot').classList.add('joined');
+    document.getElementById('create-status').innerHTML=`<span class="status-dot connected"></span> Opponent connected! Starting…`;
+    setTimeout(()=>startOnlineGame(),1200);
+  });
+  onlinePeer.on('error',err=>{
+    setBadge('ERROR','error');
+    // Retry with random ID if custom ID taken
+    if(err.type==='unavailable-id') createRoom();
+  });
+}
+
+function setBadge(txt,cls){
+  const b=document.getElementById('online-status-badge');
+  b.textContent=txt; b.className='badge b-online '+(cls||'');
+}
+
+// ── Tabs ──
+function showCreateTab(){
+  document.getElementById('tab-create').classList.add('active');
+  document.getElementById('tab-join').classList.remove('active');
+  document.getElementById('panel-create').classList.remove('hidden');
+  document.getElementById('panel-join').classList.add('hidden');
+}
+function showJoinTab(){
+  document.getElementById('tab-join').classList.add('active');
+  document.getElementById('tab-create').classList.remove('active');
+  document.getElementById('panel-join').classList.remove('hidden');
+  document.getElementById('panel-create').classList.add('hidden');
+}
+
+document.getElementById('tab-create')?.addEventListener('click',()=>{ showCreateTab(); createRoom(); });
+document.getElementById('tab-join')?.addEventListener('click',  ()=>showJoinTab());
+
+document.getElementById('btn-join-room')?.addEventListener('click',()=>{
+  const code=document.getElementById('room-code-input').value;
+  joinRoom(code);
+});
+document.getElementById('room-code-input')?.addEventListener('keydown',e=>{
+  if(e.key==='Enter') joinRoom(document.getElementById('room-code-input').value);
+});
+
+document.getElementById('btn-copy-code')?.addEventListener('click',()=>{
+  const code=document.getElementById('room-code-text').textContent;
+  navigator.clipboard?.writeText(code).then(()=>{
+    document.getElementById('btn-copy-code').textContent='✅';
+    setTimeout(()=>document.getElementById('btn-copy-code').textContent='📋',1500);
+  });
+});
+document.getElementById('btn-share-link')?.addEventListener('click',()=>{
+  const code=document.getElementById('room-code-text').textContent;
+  const url=`${location.origin}${location.pathname}?room=${code}`;
+  navigator.clipboard?.writeText(url).then(()=>{
+    document.getElementById('btn-share-link').textContent='✅ Copied!';
+    setTimeout(()=>document.getElementById('btn-share-link').textContent='🔗 Copy Invite Link',2000);
+  });
+});
+
+// ── Online keyboard controls ──
+document.addEventListener('keydown', e=>{
+  if(!onlineGameState?.active) return;
+  const m={w:[-1,0],W:[-1,0],s:[1,0],S:[1,0],a:[0,-1],A:[0,-1],d:[0,1],D:[0,1],
+           ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]};
+  if(m[e.key]){ e.preventDefault(); onlineMove(m[e.key][0],m[e.key][1]); }
+});
+
+// Online D-pad
+document.getElementById('odp-up')?.addEventListener('click',   ()=>onlineMove(-1,0));
+document.getElementById('odp-down')?.addEventListener('click', ()=>onlineMove(1,0));
+document.getElementById('odp-left')?.addEventListener('click', ()=>onlineMove(0,-1));
+document.getElementById('odp-right')?.addEventListener('click',()=>onlineMove(0,1));
+
+document.getElementById('splash-online')?.addEventListener('click',()=>launchOnline());
+document.getElementById('btn-online-back')?.addEventListener('click',()=>{
+  if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} onlinePeer=null; }
+  document.getElementById('online-screen').classList.add('hidden');
+  goToMenu();
+});
+document.getElementById('btn-online-quit')?.addEventListener('click',()=>{
+  if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} onlinePeer=null; }
+  document.getElementById('online-screen').classList.add('hidden');
+  goToMenu();
+});
+document.getElementById('btn-online-restart')?.addEventListener('click',()=>{
+  if(onlineRole==='host'){
+    const state=buildOnlineGameState(DIFFICULTY[difficulty]);
+    onlineGameState=state;
+    safeSend({type:'restart',state});
+    renderOnlineGrid(); updateOnlineHUD();
+    showCountdownOnline(()=>{ onlineGameState.active=true; setOnlineMsg('🏃 Race!'); });
+  } else {
+    setOnlineMsg('⏳ Waiting for host to restart…');
+  }
+});
+
+// Auto-open create tab on load (trigger createRoom after peer inits)
+// (handled when user clicks the Online button)
