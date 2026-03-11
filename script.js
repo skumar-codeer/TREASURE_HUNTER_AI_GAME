@@ -164,8 +164,6 @@ function launchGame(m){
   algoBadge.textContent=aInfo.label;
   btnAISolve.style.display=m==='ai'?'none':'';
   compassWrap.style.display=m==='player'?'':'none';
-  const dpadWrap=$('dpad-container');
-  if(dpadWrap) dpadWrap.style.display=m==='player'?'':'none';
   $('h-lives-wrap').style.display=maxLives>1?'':'none';
   splashScreen.classList.add('hide-out');
   setTimeout(()=>{splashScreen.classList.add('hidden');gameScreen.classList.remove('hidden');startRound()},350);
@@ -601,7 +599,6 @@ btnAISolve.addEventListener('click',()=>{
   if(aiRunning||!gameActive)return;
   mode='ai';modeBadge.textContent='AI';modeBadge.classList.add('ai');
   btnAISolve.disabled=true;compassWrap.style.display='none';
-  const dpadWrap=$('dpad-container');if(dpadWrap)dpadWrap.style.display='none';
   clearVis();setMsg(`AI (${ALGORITHMS[selectedAlgo].label}) computing… 🤖`);
   if(!timerInterval)startTimer();
   runAlgorithm(selectedAlgo);
@@ -837,3 +834,399 @@ $('btn-compare-restart')?.addEventListener('click',()=>{startCompareRound();});
 // ── Helpers ──
 function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
 function inB(r,c){return r>=0&&r<rows&&c>=0&&c<cols;}
+
+// ══════════════════════════════════════════
+// 2-PLAYER MODE
+// ══════════════════════════════════════════
+
+const CELL_P1 = 8, CELL_P2 = 9;
+
+const twopState = {
+  grid: [], rows: 0, cols: 0,
+  p1: { pos:{r:0,c:0}, moves:0, lives:1, maxLives:1, score:1000, powerup:null, alive:true, trail:[] },
+  p2: { pos:{r:0,c:0}, moves:0, lives:1, maxLives:1, score:1000, powerup:null, alive:true, trail:[] },
+  trapPositions: [],
+  active: false,
+  timerInterval: null,
+  elapsed: 0,
+  winner: null,
+};
+
+function launchTwoPlayer() {
+  ensureAudio();
+  const cfg = DIFFICULTY[difficulty];
+  twopState.rows = cfg.rows;
+  twopState.cols = cfg.cols;
+  splashScreen.classList.add('hide-out');
+  setTimeout(() => {
+    splashScreen.classList.add('hidden');
+    const sc = document.getElementById('twop-screen');
+    sc.classList.remove('hidden');
+    document.getElementById('twop-diff-badge').textContent = cfg.label;
+    startTwoPlayerRound();
+  }, 350);
+}
+
+function generateTwopGrid() {
+  const cfg = DIFFICULTY[difficulty];
+  const R = twopState.rows, C = twopState.cols;
+  let att = 0, G, p1, p2;
+  do {
+    G = Array.from({length:R}, () => Array(C).fill(CELL_EMPTY));
+    p1 = {r: randInt(1, R-2), c: 0};
+    p2 = {r: randInt(1, R-2), c: C-1};
+    G[p1.r][p1.c] = CELL_P1;
+    G[p2.r][p2.c] = CELL_P2;
+    // Treasure in the middle-ish
+    const tr = {r: randInt(Math.floor(R*.3), Math.floor(R*.7)), c: randInt(Math.floor(C*.3), Math.floor(C*.7))};
+    G[tr.r][tr.c] = CELL_TREASURE;
+    twopState.treasurePos = tr;
+    placeRandomIn(G, R, C, CELL_OBSTACLE, cfg.obstacles);
+    placeRandomIn(G, R, C, CELL_TRAP,     Math.floor(cfg.traps * .6));
+    placeRandomIn(G, R, C, CELL_MUD,      cfg.mud);
+    placeRandomIn(G, R, C, CELL_POWERUP,  cfg.powerups);
+    att++;
+  } while (att < 200 && !(hasPathIn(G,R,C,p1,twopState.treasurePos) && hasPathIn(G,R,C,p2,twopState.treasurePos)));
+
+  twopState.grid = G;
+  twopState.p1.pos = p1;
+  twopState.p2.pos = p2;
+  twopState.trapPositions = [];
+  for (let r=0;r<R;r++) for (let c=0;c<C;c++) if(G[r][c]===CELL_TRAP) twopState.trapPositions.push({r,c});
+}
+
+function startTwoPlayerRound() {
+  // Reset state
+  clearInterval(twopState.timerInterval);
+  twopState.active = false;
+  twopState.winner = null;
+  twopState.elapsed = 0;
+
+  const cfg = DIFFICULTY[difficulty];
+  const ml = cfg.lives;
+  twopState.p1 = { pos:{r:0,c:0}, moves:0, lives:ml, maxLives:ml, score:1000, powerup:null, alive:true, trail:[] };
+  twopState.p2 = { pos:{r:0,c:0}, moves:0, lives:ml, maxLives:ml, score:1000, powerup:null, alive:true, trail:[] };
+
+  generateTwopGrid();
+  renderTwopGrid();
+  updateTwopHUD();
+
+  document.getElementById('twop-badge-p1').textContent = 'P1 ALIVE';
+  document.getElementById('twop-badge-p1').classList.remove('eliminated');
+  document.getElementById('twop-badge-p2').textContent = 'P2 ALIVE';
+  document.getElementById('twop-badge-p2').classList.remove('eliminated');
+  document.getElementById('p1-lives-wrap').style.display = ml > 1 ? '' : 'none';
+  document.getElementById('p2-lives-wrap').style.display = ml > 1 ? '' : 'none';
+
+  setTwopMsg('Get ready…');
+  showCountdown(() => {
+    twopState.active = true;
+    setTwopMsg('🏃 Race to the treasure! P1=WASD · P2=ARROWS');
+    twopState.timerInterval = setInterval(() => {
+      twopState.elapsed++;
+      document.getElementById('twop-timer').textContent = fmtT(twopState.elapsed);
+    }, 1000);
+  });
+}
+
+// Countdown overlay 3-2-1-GO!
+function showCountdown(cb) {
+  const overlay = document.createElement('div');
+  overlay.className = 'countdown-overlay';
+  document.body.appendChild(overlay);
+  const steps = ['3','2','1','GO!'];
+  let i = 0;
+  function next() {
+    if (i >= steps.length) { overlay.remove(); cb(); return; }
+    overlay.innerHTML = `<div class="countdown-num">${steps[i]}</div>`;
+    if (steps[i] === 'GO!') tone(880, .25, 'sine', .12);
+    else tone(440 + i*80, .18, 'square', .07);
+    i++;
+    setTimeout(next, i < steps.length ? 900 : 600);
+  }
+  next();
+}
+
+// ── Render 2P Grid ──
+function renderTwopGrid() {
+  const gEl = document.getElementById('twop-grid');
+  const {rows:R, cols:C, grid:G} = twopState;
+  gEl.innerHTML = '';
+  gEl.style.gridTemplateColumns = `repeat(${C}, var(--cell))`;
+  gEl.style.gridTemplateRows    = `repeat(${R}, var(--cell))`;
+  for (let r=0;r<R;r++) for (let c=0;c<C;c++) {
+    const el = document.createElement('div');
+    el.classList.add('cell');
+    applyTwopCellType(el, r, c, G[r][c]);
+    gEl.appendChild(el);
+  }
+}
+
+function applyTwopCellType(el, r, c, type) {
+  if (type === CELL_P1) {
+    el.classList.add('p1-agent');
+    el.innerHTML = `<span class="agent-avatar">🟦</span>`;
+  } else if (type === CELL_P2) {
+    el.classList.add('p2-agent');
+    el.innerHTML = `<span class="agent-avatar">🟥</span>`;
+  } else if (type === CELL_TREASURE) {
+    el.classList.add('treasure');
+    const img = document.createElement('img'); img.src='assets/treasure.png'; img.draggable=false; el.appendChild(img);
+  } else if (type === CELL_TRAP) {
+    el.classList.add('trap');
+    const img = document.createElement('img'); img.src='assets/trap.png'; img.draggable=false; el.appendChild(img);
+  } else if (type === CELL_OBSTACLE) {
+    el.classList.add('obstacle');
+    const img = document.createElement('img'); img.src='assets/obstacle.png'; img.draggable=false; el.appendChild(img);
+  } else if (type === CELL_MUD)     el.classList.add('mud');
+  else if (type === CELL_ICE)       el.classList.add('ice');
+  else if (type === CELL_POWERUP)   el.classList.add('powerup');
+}
+
+function getTwopCell(r, c) {
+  const gEl = document.getElementById('twop-grid');
+  return gEl.children[r * twopState.cols + c] || null;
+}
+
+function refreshTwopCell(r, c) {
+  const el = getTwopCell(r, c);
+  if (!el) return;
+  el.className = 'cell';
+  el.innerHTML = '';
+  applyTwopCellType(el, r, c, twopState.grid[r][c]);
+  // Re-apply trails
+  if (twopState.p1.trail.some(t=>t.r===r&&t.c===c)) el.classList.add('p1-trail');
+  if (twopState.p2.trail.some(t=>t.r===r&&t.c===c)) el.classList.add('p2-trail');
+}
+
+function setTwopMsg(txt, cls='') {
+  const el = document.getElementById('twop-message');
+  el.textContent = txt; el.className = 'twop-msg ' + cls;
+}
+
+// ── HUD Update ──
+function updateTwopHUD() {
+  const {p1, p2} = twopState;
+  document.getElementById('p1-moves').textContent = p1.moves;
+  document.getElementById('p1-score').textContent = p1.score;
+  document.getElementById('p1-lives').textContent = '❤️'.repeat(p1.lives) + '🖤'.repeat(p1.maxLives - p1.lives);
+  document.getElementById('p1-power-wrap').style.display = p1.powerup ? '' : 'none';
+  if (p1.powerup) document.getElementById('p1-power').textContent = '🛡️';
+
+  document.getElementById('p2-moves').textContent = p2.moves;
+  document.getElementById('p2-score').textContent = p2.score;
+  document.getElementById('p2-lives').textContent = '❤️'.repeat(p2.lives) + '🖤'.repeat(p2.maxLives - p2.lives);
+  document.getElementById('p2-power-wrap').style.display = p2.powerup ? '' : 'none';
+  if (p2.powerup) document.getElementById('p2-power').textContent = '🛡️';
+}
+
+function calcTwopScore(p) {
+  const diffBonus = {easy:0, medium:100, hard:200, extreme:400}[difficulty] || 0;
+  return Math.max(0, Math.round(1000 - p.moves * 5 - twopState.elapsed * 2 + (p.lives/p.maxLives)*150 + diffBonus));
+}
+
+// ── Player Move Logic ──
+function twopMove(playerKey, dr, dc) {
+  if (!twopState.active) return;
+  const p = twopState[playerKey];
+  if (!p.alive) return;
+
+  const {rows:R, cols:C, grid:G} = twopState;
+  const nr = p.pos.r + dr, nc = p.pos.c + dc;
+  if (nr < 0 || nr >= R || nc < 0 || nc >= C) return;
+
+  const dest = G[nr][nc];
+  if (dest === CELL_OBSTACLE) return;
+  // Can't walk into other player's cell (bump)
+  const otherKey = playerKey === 'p1' ? 'p2' : 'p1';
+  const other = twopState[otherKey];
+  if (other.alive && other.pos.r === nr && other.pos.c === nc) {
+    setTwopMsg(`💥 Players collide! Can't move there!`);
+    tone(300, .1, 'square', .05);
+    return;
+  }
+
+  // Move
+  const oldR = p.pos.r, oldC = p.pos.c;
+  G[oldR][oldC] = CELL_EMPTY;
+  p.trail.push({r:oldR, c:oldC});
+  if (p.trail.length > 6) p.trail.shift();
+  refreshTwopCell(oldR, oldC);
+
+  p.pos = {r:nr, c:nc};
+  p.moves++;
+
+  // Handle destination
+  if (dest === CELL_TREASURE) {
+    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+    refreshTwopCell(nr, nc);
+    p.score = calcTwopScore(p);
+    updateTwopHUD();
+    endTwoPlayerGame(playerKey, 'treasure');
+    return;
+  }
+
+  if (dest === CELL_TRAP) {
+    if (p.powerup === 'shield') {
+      p.powerup = null;
+      setTwopMsg(`🛡️ ${playerKey.toUpperCase()} shield blocked the trap!`);
+      G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+      twopState.trapPositions = twopState.trapPositions.filter(t=>!(t.r===nr&&t.c===nc));
+    } else {
+      p.lives--;
+      sfxTrap();
+      const el = getTwopCell(nr, nc);
+      if (el) el.classList.add('danger-flash');
+      if (p.lives <= 0) {
+        p.alive = false;
+        p.pos = {r:oldR, c:oldC}; // stay in old pos for display
+        G[oldR][oldC] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+        refreshTwopCell(oldR, oldC);
+        document.getElementById(`twop-badge-${playerKey}`).textContent = `${playerKey.toUpperCase()} 💀`;
+        document.getElementById(`twop-badge-${playerKey}`).classList.add('eliminated');
+        setTwopMsg(`💀 ${playerKey.toUpperCase()} eliminated!`, playerKey==='p1'?'p2-win':'p1-win');
+        p.score = 0;
+        updateTwopHUD();
+        // Check if other player also dead
+        if (!other.alive) { endTwoPlayerGame(null, 'both-dead'); return; }
+        // Other player wins by survival
+        setTimeout(() => endTwoPlayerGame(otherKey, 'survival'), 1200);
+        return;
+      } else {
+        sfxLoseLife();
+        setTwopMsg(`💥 ${playerKey.toUpperCase()} hit a trap! ${p.lives} lives left`);
+        G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+        twopState.trapPositions = twopState.trapPositions.filter(t=>!(t.r===nr&&t.c===nc));
+      }
+    }
+  } else if (dest === CELL_POWERUP) {
+    p.powerup = 'shield';
+    sfxPowerup();
+    setTwopMsg(`⚡ ${playerKey.toUpperCase()} picked up a shield!`);
+    const el = getTwopCell(nr, nc);
+    if (el) fxBurst(el, playerKey==='p1'?'#44aaff':'#ff5050', 10);
+    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+  } else if (dest === CELL_MUD) {
+    sfxMud();
+    setTwopMsg(`🟫 ${playerKey.toUpperCase()} is stuck in mud!`);
+    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+  } else {
+    sfxMove();
+    G[nr][nc] = playerKey === 'p1' ? CELL_P1 : CELL_P2;
+  }
+
+  p.score = calcTwopScore(p);
+  refreshTwopCell(nr, nc);
+  updateTwopHUD();
+}
+
+// ── End 2P Game ──
+function endTwoPlayerGame(winnerKey, reason) {
+  twopState.active = false;
+  clearInterval(twopState.timerInterval);
+
+  const {p1, p2} = twopState;
+  p1.score = calcTwopScore(p1);
+  p2.score = calcTwopScore(p2);
+
+  // FX
+  if (winnerKey === 'p1') {
+    const el = getTwopCell(p1.pos.r, p1.pos.c);
+    if (el) fxBurst(el, '#44aaff', 16);
+    sfxWin();
+  } else if (winnerKey === 'p2') {
+    const el = getTwopCell(p2.pos.r, p2.pos.c);
+    if (el) fxBurst(el, '#ff5050', 16);
+    sfxWin();
+  }
+
+  setTimeout(() => showTwopEnd(winnerKey, reason), 600);
+}
+
+function showTwopEnd(winnerKey, reason) {
+  const {p1, p2} = twopState;
+  const endScr = document.getElementById('twop-end-screen');
+  endScr.classList.remove('hidden');
+
+  let emoji, title, sub;
+  if (!winnerKey || reason === 'both-dead') {
+    emoji='😵'; title='Both Eliminated!'; sub='Nobody survived the traps!';
+  } else if (reason === 'treasure') {
+    const name = winnerKey === 'p1' ? '🟦 Player 1' : '🟥 Player 2';
+    emoji='🏆'; title=`${name} Wins!`; sub='First to reach the treasure!';
+  } else if (reason === 'survival') {
+    const name = winnerKey === 'p1' ? '🟦 Player 1' : '🟥 Player 2';
+    emoji='💀'; title=`${name} Wins!`; sub='Last survivor wins!';
+  }
+
+  document.getElementById('twop-end-emoji').textContent = emoji;
+  document.getElementById('twop-end-title').textContent = title;
+  document.getElementById('twop-end-sub').textContent = sub;
+
+  // Stats
+  document.getElementById('tpr-p1-moves').textContent = p1.moves;
+  document.getElementById('tpr-p1-score').textContent = p1.score;
+  document.getElementById('tpr-p1-status').textContent = p1.alive ? (winnerKey==='p1'?'🏆 WON':'Still going') : '💀 Out';
+
+  document.getElementById('tpr-p2-moves').textContent = p2.moves;
+  document.getElementById('tpr-p2-score').textContent = p2.score;
+  document.getElementById('tpr-p2-status').textContent = p2.alive ? (winnerKey==='p2'?'🏆 WON':'Still going') : '💀 Out';
+
+  // Highlight winner card
+  document.getElementById('twop-p1-result').classList.toggle('winner', winnerKey==='p1');
+  document.getElementById('twop-p2-result').classList.toggle('winner', winnerKey==='p2');
+
+  // Save score
+  if (winnerKey) {
+    const wp = winnerKey === 'p1' ? p1 : p2;
+    addScore(wp.score, difficulty, '2P');
+  }
+}
+
+// ── Keyboard: 2P Controls ──
+document.addEventListener('keydown', e => {
+  if (!twopState.active) return;
+  const p1map = { w:[-1,0], W:[-1,0], s:[1,0], S:[1,0], a:[0,-1], A:[0,-1], d:[0,1], D:[0,1] };
+  const p2map = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
+  if (p1map[e.key]) { e.preventDefault(); twopMove('p1', p1map[e.key][0], p1map[e.key][1]); }
+  else if (p2map[e.key]) { e.preventDefault(); twopMove('p2', p2map[e.key][0], p2map[e.key][1]); }
+});
+
+// ── Mobile D-Pad: 2P ──
+document.getElementById('p1-up')?.addEventListener('click',    () => twopMove('p1',-1,0));
+document.getElementById('p1-down')?.addEventListener('click',  () => twopMove('p1',1,0));
+document.getElementById('p1-left')?.addEventListener('click',  () => twopMove('p1',0,-1));
+document.getElementById('p1-right')?.addEventListener('click', () => twopMove('p1',0,1));
+document.getElementById('p2-up')?.addEventListener('click',    () => twopMove('p2',-1,0));
+document.getElementById('p2-down')?.addEventListener('click',  () => twopMove('p2',1,0));
+document.getElementById('p2-left')?.addEventListener('click',  () => twopMove('p2',0,-1));
+document.getElementById('p2-right')?.addEventListener('click', () => twopMove('p2',0,1));
+
+// ── Buttons ──
+document.getElementById('splash-2p')?.addEventListener('click', () => launchTwoPlayer());
+
+document.getElementById('btn-twop-back')?.addEventListener('click', () => {
+  clearInterval(twopState.timerInterval);
+  twopState.active = false;
+  document.getElementById('twop-screen').classList.add('hidden');
+  goToMenu();
+});
+document.getElementById('btn-twop-menu')?.addEventListener('click', () => {
+  clearInterval(twopState.timerInterval);
+  twopState.active = false;
+  document.getElementById('twop-screen').classList.add('hidden');
+  goToMenu();
+});
+document.getElementById('btn-twop-restart')?.addEventListener('click', () => {
+  document.getElementById('twop-end-screen').classList.add('hidden');
+  startTwoPlayerRound();
+});
+document.getElementById('twop-end-retry')?.addEventListener('click', () => {
+  document.getElementById('twop-end-screen').classList.add('hidden');
+  startTwoPlayerRound();
+});
+document.getElementById('twop-end-menu')?.addEventListener('click', () => {
+  document.getElementById('twop-end-screen').classList.add('hidden');
+  document.getElementById('twop-screen').classList.add('hidden');
+  goToMenu();
+});
