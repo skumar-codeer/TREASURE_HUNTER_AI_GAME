@@ -150,19 +150,6 @@ $('splash-ai').addEventListener('click',()=>launchGame('ai'));
 $('splash-compare').addEventListener('click',()=>launchCompare());
 renderLB();
 
-// ── Touch / D-pad detection ──
-// Show dpad on any device that has touch capability (phone, tablet, touch laptop)
-const isTouchDevice = ()=> ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-function showDpad(wrapId){
-  if(!isTouchDevice()) return;
-  const el = document.getElementById(wrapId);
-  if(el) el.classList.add('show-dpad');
-}
-function hideDpad(wrapId){
-  const el = document.getElementById(wrapId);
-  if(el) el.classList.remove('show-dpad');
-}
-
 function launchGame(m){
   ensureAudio();
   const cfg=DIFFICULTY[difficulty];
@@ -179,9 +166,7 @@ function launchGame(m){
   compassWrap.style.display=m==='player'?'':'none';
   $('h-lives-wrap').style.display=maxLives>1?'':'none';
   splashScreen.classList.add('hide-out');
-  setTimeout(()=>{splashScreen.classList.add('hidden');gameScreen.classList.remove('hidden');startRound();
-    if(m==='player') showDpad('dpad-container'); else hideDpad('dpad-container');
-  },350);
+  setTimeout(()=>{splashScreen.classList.add('hidden');gameScreen.classList.remove('hidden');startRound()},350);
 }
 
 // ── Grid Generation ──
@@ -479,10 +464,17 @@ document.addEventListener('keydown',e=>{
   if(m[e.key]){e.preventDefault();moveAgent(m[e.key][0],m[e.key][1]);}
 });
 
-$('dpad-up')?.addEventListener('click',()=>moveAgent(-1,0));
-$('dpad-down')?.addEventListener('click',()=>moveAgent(1,0));
-$('dpad-left')?.addEventListener('click',()=>moveAgent(0,-1));
-$('dpad-right')?.addEventListener('click',()=>moveAgent(0,1));
+// ── D-Pad: single player (touch + click, prevent scroll) ──
+function wireDpad(id, dr, dc, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', e => { e.preventDefault(); fn(dr, dc); }, {passive:false});
+  el.addEventListener('mousedown',  e => { e.preventDefault(); fn(dr, dc); });
+}
+wireDpad('dpad-up',    -1,  0, moveAgent);
+wireDpad('dpad-down',   1,  0, moveAgent);
+wireDpad('dpad-left',   0, -1, moveAgent);
+wireDpad('dpad-right',  0,  1, moveAgent);
 
 // ── Algorithm Engine ──
 function heuristic(r1,c1,r2,c2){return Math.abs(r1-r2)+Math.abs(c1-c2);}
@@ -1369,7 +1361,31 @@ function showCountdown(cb) {
   next();
 }
 
-// ── Buttons ──
+// ── 2P D-Pad: proper touch + click listeners, passive:false ──
+function wire2PDpad(id, pk, dr, dc) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', e => { e.preventDefault(); twopMove(pk, dr, dc); }, {passive:false});
+  el.addEventListener('mousedown',  e => { e.preventDefault(); twopMove(pk, dr, dc); });
+}
+wire2PDpad('p1-up',    'p1', -1,  0);
+wire2PDpad('p1-down',  'p1',  1,  0);
+wire2PDpad('p1-left',  'p1',  0, -1);
+wire2PDpad('p1-right', 'p1',  0,  1);
+wire2PDpad('p2-up',    'p2', -1,  0);
+wire2PDpad('p2-down',  'p2',  1,  0);
+wire2PDpad('p2-left',  'p2',  0, -1);
+wire2PDpad('p2-right', 'p2',  0,  1);
+
+// ── 2P Bomb buttons ──
+;['p1','p2'].forEach(pk => {
+  const btn = document.getElementById(`${pk}-bomb-btn`);
+  if (!btn) return;
+  btn.addEventListener('touchstart', e => { e.preventDefault(); useBomb(pk); }, {passive:false});
+  btn.addEventListener('click', () => useBomb(pk));
+});
+
+// ── 2P Screen Buttons ──
 document.getElementById('splash-2p')?.addEventListener('click', launchTwoPlayer);
 document.getElementById('btn-twop-back')?.addEventListener('click', () => {
   clearInterval(twopState.timerInterval); twopState.active=false;
@@ -1423,33 +1439,32 @@ function launchOnline(){
   splashScreen.classList.add('hide-out');
   setTimeout(()=>{
     splashScreen.classList.add('hidden');
-    document.getElementById('online-screen').classList.remove('hidden');
-    // Always start with Create Room tab and generate a code immediately
-    showCreateTab();
-    createRoom();
-  },350);
-}
-
-function initPeer(){
-  // Used by guest (Join flow) — creates a random-ID peer to connect from
-  setBadge('CONNECTING…','');
-  if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
-  onlinePeer = new Peer(undefined, {debug:0});
-  onlinePeer.on('open', ()=>{
-    setBadge('ONLINE','connected');
-    // Auto-fill room code from URL if present
+    const scr = document.getElementById('online-screen');
+    scr.classList.remove('hidden');
+    // Reset lobby state
+    document.getElementById('online-lobby').classList.remove('hidden');
+    document.getElementById('online-game-wrap').classList.add('hidden');
+    // Auto-detect invite link
     const params = new URLSearchParams(location.search);
     const codeParam = params.get('room');
     if(codeParam){
       showJoinTab();
       document.getElementById('room-code-input').value = codeParam;
-      document.getElementById('join-status').innerHTML = `<span class="status-dot waiting"></span> Room code pre-filled — click Join!`;
+      document.getElementById('join-status').innerHTML = `<span class="status-dot waiting"></span> Code pre-filled — click Join!`;
+      initPeerForJoin();
+    } else {
+      showCreateTab();
+      createRoom();
     }
-  });
-  onlinePeer.on('error', err=>{
-    setBadge('ERROR','error');
-    document.getElementById('join-status').innerHTML = `<span class="status-dot error"></span> Error: ${err.type}`;
-  });
+  },350);
+}
+
+function initPeerForJoin(){
+  setBadge('CONNECTING…','');
+  if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
+  onlinePeer = new Peer(undefined, {debug:0});
+  onlinePeer.on('open', ()=>{ setBadge('ONLINE','connected'); });
+  onlinePeer.on('error', err=>{ setBadge('ERROR','error'); setJoinStatus('error',`Error: ${err.type}`); });
   onlinePeer.on('disconnected',()=>{ try{onlinePeer.reconnect();}catch(e){} });
 }
 
@@ -1473,7 +1488,6 @@ function handleOnlineMessage(msg){
     updateOnlineHUD();
     document.getElementById('online-lobby').classList.add('hidden');
     document.getElementById('online-game-wrap').classList.remove('hidden');
-    showDpad('online-dpad-wrap');
     showCountdownOnline(()=>{
       onlineGameState.active = true;
       setOnlineMsg('🏃 Race to the treasure!');
@@ -1508,7 +1522,6 @@ function startOnlineGame(){
   document.getElementById('online-game-wrap').classList.remove('hidden');
   renderOnlineGrid();
   updateOnlineHUD();
-  showDpad('online-dpad-wrap');
 
   showCountdownOnline(()=>{
     onlineGameState.active = true;
@@ -1550,20 +1563,6 @@ function buildOnlineGameState(cfg){
   };
 }
 
-// ── Online Cell Type Renderer ──
-function applyOnlineCellType(el, type){
-  switch(type){
-    case CELL_P1:       el.classList.add('p1-agent'); el.innerHTML=`<span class="agent-avatar">🟦</span>`; break;
-    case CELL_P2:       el.classList.add('p2-agent'); el.innerHTML=`<span class="agent-avatar">🟥</span>`; break;
-    case CELL_TREASURE: el.classList.add('treasure'); el.innerHTML=`<img src="assets/treasure.png" draggable="false">`; break;
-    case CELL_TRAP:     el.classList.add('trap');     el.innerHTML=`<img src="assets/trap.png" draggable="false">`; break;
-    case CELL_OBSTACLE: el.classList.add('obstacle'); el.innerHTML=`<img src="assets/obstacle.png" draggable="false">`; break;
-    case CELL_MUD:      el.classList.add('mud'); break;
-    case CELL_ICE:      el.classList.add('ice'); break;
-    case CELL_POWERUP:  el.classList.add('powerup'); el.innerHTML=`<span style="font-size:.9rem">⚡</span>`; break;
-  }
-}
-
 // ── Online Grid Rendering ──
 function renderOnlineGrid(){
   const gEl = document.getElementById('online-grid');
@@ -1573,7 +1572,7 @@ function renderOnlineGrid(){
   gEl.style.gridTemplateRows=`repeat(${R},var(--cell))`;
   for(let r=0;r<R;r++) for(let c=0;c<C;c++){
     const el=document.createElement('div'); el.classList.add('cell');
-    applyOnlineCellType(el,G[r][c]);
+    applyTwopCellType(el,r,c,G[r][c]);
     gEl.appendChild(el);
   }
 }
@@ -1586,7 +1585,7 @@ function getOnlineCell(r,c){
 function refreshOnlineCell(r,c){
   const el=getOnlineCell(r,c); if(!el) return;
   el.className='cell'; el.innerHTML='';
-  applyOnlineCellType(el,onlineGameState.grid[r][c]);
+  applyTwopCellType(el,r,c,onlineGameState.grid[r][c]);
 }
 
 // ── Online HUD ──
@@ -1608,7 +1607,7 @@ function updateOnlineHUD(){
 
 function setOnlineMsg(txt,cls=''){
   const el=document.getElementById('online-message');
-  if(el){ el.textContent=txt; el.className='online-msg '+(cls||''); }
+  el.textContent=txt; el.className='twop-msg '+cls;
 }
 
 // ── My Move ──
@@ -1745,63 +1744,79 @@ function showDisconnectBanner(msg){
   document.body.appendChild(b); setTimeout(()=>b.remove(),4000);
 }
 
+function setJoinStatus(type, msg){
+  document.getElementById('join-status').innerHTML = `<span class="status-dot ${type}"></span> ${msg}`;
+}
+
 // ── Join via code ──
 function joinRoom(code){
   const cleanCode = code.trim().toUpperCase();
-  if(!cleanCode || cleanCode.length < 4){ return; }
-  document.getElementById('join-status').innerHTML=`<span class="status-dot waiting"></span> Connecting to ${cleanCode}…`;
+  if(!cleanCode || cleanCode.length < 4){ setJoinStatus('error','Please enter a valid code'); return; }
+  setJoinStatus('waiting',`Connecting to ${cleanCode}…`);
 
-  const doConnect = () => {
+  const doJoin = () => {
     const peerId = 'TH-'+cleanCode;
     const conn = onlinePeer.connect(peerId, {reliable:true, serialization:'json'});
     onlineConn = conn;
     onlineRole = 'guest';
     myOnlineKey = 'p2';
+    let connected = false;
+
     conn.on('open',()=>{
-      document.getElementById('join-status').innerHTML=`<span class="status-dot connected"></span> Connected! Waiting for host to start…`;
+      connected = true;
+      setJoinStatus('connected','Connected! Waiting for host to start…');
       setupConnection(conn);
     });
+    setTimeout(()=>{
+      if(!connected) setJoinStatus('error','Could not connect — check the code and try again');
+    }, 8000);
     conn.on('error',()=>{
-      document.getElementById('join-status').innerHTML=`<span class="status-dot error"></span> Could not connect — check the code`;
+      setJoinStatus('error','Could not connect — check the code and try again');
     });
   };
 
-  if(!onlinePeer || onlinePeer.destroyed){
-    // Create a guest peer first, then connect
-    if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
-    onlinePeer = new Peer(undefined, {debug:0});
-    onlinePeer.on('open', ()=>{ setBadge('ONLINE','connected'); doConnect(); });
-    onlinePeer.on('error', err=>{ setBadge('ERROR','error'); });
+  if(onlinePeer && !onlinePeer.destroyed && onlinePeer.open !== false){
+    doJoin();
   } else {
-    doConnect();
+    if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
+    setBadge('CONNECTING…','');
+    onlinePeer = new Peer(undefined, {debug:0});
+    onlinePeer.on('open', ()=>{ setBadge('ONLINE','connected'); doJoin(); });
+    onlinePeer.on('error', err=>{ setBadge('ERROR','error'); setJoinStatus('error',`Error: ${err.type}`); });
   }
 }
 
-// When creating a room, register with a human-readable peer ID
 function createRoom(){
   const code = makeRoomCode();
   const peerId = 'TH-'+code;
-  // Re-init peer with custom ID
   if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} }
   setBadge('CONNECTING…','');
+  document.getElementById('room-code-text').textContent = '…';
+
   onlinePeer = new Peer(peerId, {debug:0});
-  onlinePeer.on('open',id=>{
-    setBadge('ONLINE','connected');
-    document.getElementById('room-code-text').textContent = code;
+  onlinePeer.on('open', id=>{
+    setBadge('ONLINE ✓','connected');
     onlineRole='host'; myOnlineKey='p1';
+    document.getElementById('room-code-text').textContent = code;
+    document.getElementById('create-status').innerHTML =
+      `<span class="status-dot waiting"></span> Waiting for opponent to join…`;
+    document.getElementById('p2-join-slot').textContent = '🟥 Waiting…';
+    document.getElementById('p2-join-slot').classList.remove('joined');
   });
   onlinePeer.on('connection', conn=>{
     onlineConn=conn; setupConnection(conn);
-    document.getElementById('p2-join-slot').textContent='🟥 Opponent joined!';
+    document.getElementById('p2-join-slot').textContent='🟥 Opponent joined! ✓';
     document.getElementById('p2-join-slot').classList.add('joined');
-    document.getElementById('create-status').innerHTML=`<span class="status-dot connected"></span> Opponent connected! Starting…`;
-    setTimeout(()=>startOnlineGame(),1200);
+    document.getElementById('create-status').innerHTML=`<span class="status-dot connected"></span> Connected! Starting game…`;
+    setTimeout(()=>startOnlineGame(), 1500);
   });
-  onlinePeer.on('error',err=>{
+  onlinePeer.on('error', err=>{
     setBadge('ERROR','error');
-    // Retry with random ID if custom ID taken
-    if(err.type==='unavailable-id') createRoom();
+    document.getElementById('create-status').innerHTML=
+      `<span class="status-dot error"></span> ${err.type==='unavailable-id'?'Code taken, retrying…':'Error: '+err.type}`;
+    if(err.type==='unavailable-id') setTimeout(createRoom,500);
   });
+  onlinePeer.on('disconnected',()=>{ try{onlinePeer.reconnect();}catch(e){} });
 }
 
 function setBadge(txt,cls){
@@ -1824,7 +1839,7 @@ function showJoinTab(){
 }
 
 document.getElementById('tab-create')?.addEventListener('click',()=>{ showCreateTab(); createRoom(); });
-document.getElementById('tab-join')?.addEventListener('click',  ()=>showJoinTab());
+document.getElementById('tab-join')?.addEventListener('click',  ()=>{ showJoinTab(); initPeerForJoin(); });
 
 document.getElementById('btn-join-room')?.addEventListener('click',()=>{
   const code=document.getElementById('room-code-input').value;
@@ -1852,30 +1867,33 @@ document.getElementById('btn-share-link')?.addEventListener('click',()=>{
 
 // ── Online keyboard controls ──
 document.addEventListener('keydown', e=>{
-  if(!onlineGameState?.active || !myOnlineKey) return;
+  if(!onlineGameState?.active) return;
   const m={w:[-1,0],W:[-1,0],s:[1,0],S:[1,0],a:[0,-1],A:[0,-1],d:[0,1],D:[0,1],
            ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]};
   if(m[e.key]){ e.preventDefault(); onlineMove(m[e.key][0],m[e.key][1]); }
 });
 
 // Online D-pad
-document.getElementById('odp-up')?.addEventListener('click',   ()=>onlineMove(-1,0));
-document.getElementById('odp-down')?.addEventListener('click', ()=>onlineMove(1,0));
-document.getElementById('odp-left')?.addEventListener('click', ()=>onlineMove(0,-1));
-document.getElementById('odp-right')?.addEventListener('click',()=>onlineMove(0,1));
+// ── Online D-Pad: proper touch + click, passive:false ──
+function wireOnlineDpad(id, dr, dc) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', e => { e.preventDefault(); onlineMove(dr, dc); }, {passive:false});
+  el.addEventListener('mousedown',  e => { e.preventDefault(); onlineMove(dr, dc); });
+}
+wireOnlineDpad('odp-up',    -1,  0);
+wireOnlineDpad('odp-down',   1,  0);
+wireOnlineDpad('odp-left',   0, -1);
+wireOnlineDpad('odp-right',  0,  1);
 
 document.getElementById('splash-online')?.addEventListener('click',()=>launchOnline());
 document.getElementById('btn-online-back')?.addEventListener('click',()=>{
   if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} onlinePeer=null; }
-  myOnlineKey=null; onlineGameState.active=false;
-  clearInterval(onlineTimerInterval);
   document.getElementById('online-screen').classList.add('hidden');
   goToMenu();
 });
 document.getElementById('btn-online-quit')?.addEventListener('click',()=>{
   if(onlinePeer){ try{onlinePeer.destroy();}catch(e){} onlinePeer=null; }
-  myOnlineKey=null; onlineGameState.active=false;
-  clearInterval(onlineTimerInterval);
   document.getElementById('online-screen').classList.add('hidden');
   goToMenu();
 });
