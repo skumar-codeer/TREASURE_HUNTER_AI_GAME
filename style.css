@@ -2,7 +2,6 @@
    TREASURE HUNTER — ULTIMATE EDITION v5.0
    Web-optimised · Clean · Dark Tech
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;700&display=swap');
 
 :root {
   --bg0: #060810;
@@ -34,9 +33,9 @@
   --b2: rgba(0,229,255,0.14);
   --b3: rgba(0,229,255,0.24);
 
-  --sans: 'Space Grotesk', system-ui, sans-serif;
+  --sans: 'Inter', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'Courier New', monospace;
-  --display: 'Syne', 'Space Grotesk', sans-serif;
+  --display: 'Oswald', 'Inter', sans-serif;
 
   --cell: 48px;
   --ease: cubic-bezier(.4,0,.2,1);
