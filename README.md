@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🧭 Treasure Hunter AI — Ultimate Edition v5.0
 
 An advanced AI pathfinding visualization and interactive game, built as a showcase of classic search algorithms in action.
@@ -97,6 +96,3 @@ python -m http.server 8080
 
 ---
 *Built as an AI course project demonstrating heuristic search algorithms.*
-=======
-# TREASURE_HUNTER_AI_GAME
->>>>>>> 01d76e3c5680b1f9372a517693a360d785ae1b50
